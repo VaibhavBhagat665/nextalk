@@ -1,0 +1,251 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique
+  email         String   @unique
+  username      String   @unique
+  firstName     String?
+  lastName      String?
+  imageUrl      String?
+  statusMessage String?
+  language      String   @default("en")
+  isOnline      Boolean  @default(false)
+  lastSeen      DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages        Message[]
+  memberships     Membership[]
+  reactions       Reaction[]
+  summaries       AISummary[]
+  settings        UserSettings?
+  createdChannels Channel[]      @relation("ChannelCreator")
+  inviteLinks     InviteLink[]
+  callsInitiated  CallSession[]  @relation("CallCaller")
+  callsReceived   CallSession[]  @relation("CallCallee")
+  ownedServers    Server[]       @relation("ServerOwner")
+  serverMembers   ServerMember[]
+  voiceStates     VoiceState[]
+
+  @@index([clerkId])
+  @@index([username])
+}
+
+model Server {
+  id         String   @id @default(cuid())
+  name       String
+  icon       String?  // emoji or URL
+  ownerId    String
+  inviteCode String   @unique @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  ServerMember[]
+  channels Channel[]
+
+  @@index([ownerId])
+  @@index([inviteCode])
+}
+
+model ServerMember {
+  id       String   @id @default(cuid())
+  userId   String
+  serverId String
+  role     String   @default("member") // "owner" | "admin" | "member"
+  joinedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+  @@index([userId])
+  @@index([serverId])
+}
+
+model Channel {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  icon          String   @default("#")
+  type          String   @default("text") // "text" | "voice"
+  isPrivate     Boolean  @default(false)
+  isDM          Boolean  @default(false)
+  inviteCode    String?  @unique
+  inviteEnabled Boolean  @default(true)
+  creatorId     String?
+  serverId      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  creator     User?        @relation("ChannelCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  server      Server?      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  memberships Membership[]
+  summaries   AISummary[]
+  inviteLinks InviteLink[]
+  voiceStates VoiceState[]
+
+  @@index([name])
+  @@index([inviteCode])
+  @@index([creatorId])
+  @@index([serverId])
+}
+
+model Membership {
+  id         String    @id @default(cuid())
+  userId     String
+  channelId  String
+  role       String    @default("member") // "admin" | "moderator" | "member"
+  muted      Boolean   @default(false)
+  lastReadAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([userId])
+  @@index([channelId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  content    String
+  fileUrl    String?
+  fileName   String?
+  fileType   String?
+  isEdited   Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
+  isSystem   Boolean  @default(false)
+  encrypted  Boolean  @default(false)
+  iv         String?  // Initialization vector for E2E encryption
+  channelId  String
+  userId     String
+  dmToUserId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
+
+  @@index([channelId, createdAt])
+  @@index([dmToUserId])
+  @@index([userId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model AISummary {
+  id          String   @id @default(cuid())
+  channelId   String
+  userId      String
+  summary     String
+  actionItems String[] // PostgreSQL array
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt])
+}
+
+model UserSettings {
+  id                    String  @id @default(cuid())
+  userId                String  @unique
+  // Notifications
+  desktopNotifications  Boolean @default(true)
+  soundAlerts           Boolean @default(true)
+  muteAll               Boolean @default(false)
+  dmNotificationsOnly   Boolean @default(false)
+  // Privacy
+  showOnlineStatus      Boolean @default(true)
+  readReceipts          Boolean @default(true)
+  allowDmsFromNonMembers Boolean @default(true)
+  // Appearance
+  timeFormat            String  @default("12h") // "12h" | "24h"
+  dateFormat            String  @default("MM/DD/YYYY")
+  // E2E
+  publicKey             String? // ECDH public key (JWK JSON)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model InviteLink {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  channelId String
+  creatorId String
+  maxUses   Int?      // null = unlimited
+  uses      Int       @default(0)
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  creator User    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([channelId])
+}
+
+model CallSession {
+  id        String    @id @default(cuid())
+  callerId  String
+  calleeId  String
+  channelId String?
+  type      String    @default("voice") // "voice" | "video"
+  status    String    @default("ringing") // "ringing" | "active" | "ended" | "missed" | "rejected"
+  startedAt DateTime?
+  endedAt   DateTime?
+  duration  Int?      // seconds
+  createdAt DateTime  @default(now())
+
+  caller User @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
+  callee User @relation("CallCallee", fields: [calleeId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([calleeId])
+  @@index([channelId])
+}
+
+model VoiceState {
+  id        String   @id @default(cuid())
+  userId    String
+  channelId String
+  muted     Boolean  @default(false)
+  deafened  Boolean  @default(false)
+  video     Boolean  @default(false)
+  joinedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId])
+  @@index([userId])
+}
