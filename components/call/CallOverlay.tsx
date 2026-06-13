@@ -43,9 +43,9 @@ export default function CallOverlay({
   }, [remoteStream, callStatus]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: number;
     if (callStatus === "active") {
-      interval = setInterval(() => setDuration((d) => d + 1), 1000);
+      interval = window.setInterval(() => setDuration((d) => d + 1), 1000);
     }
     return () => clearInterval(interval);
   }, [callStatus]);

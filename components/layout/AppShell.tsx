@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import WorkspaceNav from "@/components/layout/WorkspaceNav";
 import Sidebar from "@/components/sidebar/Sidebar";
 

@@ -14,7 +14,7 @@ export default function OnlineUsers({ currentUserId }: { currentUserId: string }
   const otherUsers = onlineUsers.filter((u) => u.userId !== currentUserId);
 
   return (
-    <>
+    <div className="online-users-wrapper">
       <div className="online-users">
         <div className="online-header">
           <span className="online-title">Online — {otherUsers.length}</span>

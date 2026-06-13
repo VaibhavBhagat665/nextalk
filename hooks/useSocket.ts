@@ -37,7 +37,7 @@ export function useSocket(channelId: string | null) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
   const prevChannelRef = useRef<string | null>(null);
 
   // Connect socket — only re-run when userId changes
@@ -218,10 +218,10 @@ export function useSocket(channelId: string | null) {
     socket.emit("typing:start", channelId);
 
     if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+      window.clearTimeout(typingTimeoutRef.current);
     }
 
-    typingTimeoutRef.current = setTimeout(() => {
+    typingTimeoutRef.current = window.setTimeout(() => {
       socket.emit("typing:stop", channelId);
     }, 3000);
   }, [channelId]);

@@ -69,7 +69,7 @@ const socketChannels = new Map<string, Set<string>>();
 const socketVoiceRooms = new Map<string, string>();
 
 // Debounced presence updates
-let presenceUpdateTimeout: NodeJS.Timeout | null = null;
+let presenceUpdateTimeout: number | null = null;
 const broadcastPresence = () => {
   if (presenceUpdateTimeout) return;
   presenceUpdateTimeout = setTimeout(() => {

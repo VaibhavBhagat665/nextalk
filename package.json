@@ -38,10 +38,11 @@
     "socket.io-client": "^4.8.0",
     "svix": "^1.62.0",
     "tailwind-merge": "^3.3.0",
-    "zustand": "^5.0.0"
+    "zustand": "^5.0.0",
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
     "@types/express": "^5.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -51,7 +52,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "prisma": "^6.9.0",
-    "tailwindcss": "^4",
     "tsx": "^4.19.0",
     "typescript": "^5"
   }

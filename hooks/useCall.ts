@@ -36,9 +36,9 @@ export function useCall(currentUserId: string | null | undefined) {
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
-  const durationInterval = useRef<NodeJS.Timeout | null>(null);
+  const durationInterval = useRef<number | null>(null);
   const targetUserRef = useRef<string | null>(null);
-  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const callTimeoutRef = useRef<number | null>(null);
 
   // Cleanup media streams
   const cleanupMedia = useCallback(() => {
@@ -47,8 +47,8 @@ export function useCall(currentUserId: string | null | undefined) {
     remoteStreamRef.current = null;
     peerConnection.current?.close();
     peerConnection.current = null;
-    if (durationInterval.current) clearInterval(durationInterval.current);
-    if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+    if (durationInterval.current) window.clearInterval(durationInterval.current);
+    if (callTimeoutRef.current) window.clearTimeout(callTimeoutRef.current);
     targetUserRef.current = null;
   }, []);
 
@@ -89,10 +89,10 @@ export function useCall(currentUserId: string | null | undefined) {
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") {
-        if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+        if (callTimeoutRef.current) window.clearTimeout(callTimeoutRef.current);
         setCallState((prev) => ({ ...prev, status: "active" }));
         // Start duration timer
-        durationInterval.current = setInterval(() => {
+        durationInterval.current = window.setInterval(() => {
           setCallState((prev) => ({ ...prev, duration: prev.duration + 1 }));
         }, 1000);
       }
@@ -148,8 +148,8 @@ export function useCall(currentUserId: string | null | undefined) {
       });
 
       // Set timeout for 30 seconds
-      if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
-      callTimeoutRef.current = setTimeout(() => {
+      if (callTimeoutRef.current) window.clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = window.setTimeout(() => {
         resetCall();
         socket.emit("call:reject", { targetUserId: targetUser.userId }); // Notify other side it timed out
       }, 30000);
@@ -189,7 +189,7 @@ export function useCall(currentUserId: string | null | undefined) {
       localStream: stream,
     }));
 
-    if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+    if (callTimeoutRef.current) window.clearTimeout(callTimeoutRef.current);
 
     socket.emit("call:accept", {
       targetUserId: callState.remoteUser.userId,
