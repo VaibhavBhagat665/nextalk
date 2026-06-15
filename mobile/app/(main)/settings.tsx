@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Platform, Dimensions, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Platform, Dimensions, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -50,9 +50,10 @@ export default function SettingsScreen() {
       }
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update username:', err);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Update Failed', err.errors?.[0]?.longMessage || err.message || 'Could not update username. It might be already taken or invalid.');
     } finally {
       setIsUpdatingProfile(false);
     }

@@ -54,7 +54,7 @@ export default function WorkspaceNav({
 
   return (
     <nav className="workspace-nav">
-      <Link href="/channel" className="nav-logo" id="nav-logo" data-tooltip-right="Home">
+      <Link href="/dm" className="nav-logo" id="nav-logo" data-tooltip-right="Direct Messages">
         <MessageSquare size={18} />
       </Link>
 

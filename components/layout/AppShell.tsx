@@ -8,11 +8,13 @@ export default function AppShell({
   children,
   servers,
   channels,
+  dmChannels,
   currentUser,
 }: {
   children: React.ReactNode;
   servers: any[];
   channels: any[];
+  dmChannels?: any[];
   currentUser: any;
 }) {
   const searchParams = useSearchParams();
@@ -54,7 +56,7 @@ export default function AppShell({
       />
       <div className="col-separator" />
       <Sidebar
-        channels={filteredChannels}
+        channels={isDMMode ? (dmChannels || []) : filteredChannels}
         currentUser={currentUser}
         serverName={activeServer?.name}
         serverId={activeServerId}

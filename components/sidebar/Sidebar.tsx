@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import ChannelList from "./ChannelList";
 import CreateChannelDialog from "./CreateChannelDialog";
 import BrowseChannelsDialog from "./BrowseChannelsDialog";
@@ -17,13 +18,15 @@ interface Channel {
   id: string;
   name: string;
   icon: string;
-  type: string;
-  description: string | null;
-  isPrivate: boolean;
-  isDM: boolean;
-  lastMessage: { content: string; createdAt: string } | null;
-  role: string;
+  type?: string;
+  description?: string | null;
+  isPrivate?: boolean;
+  isDM?: boolean;
+  lastMessage?: { content: string; createdAt: string } | null;
+  role?: string;
   voiceUsers?: { id: string; username: string; imageUrl: string | null; muted: boolean }[];
+  targetUserId?: string;
+  isOnline?: boolean;
 }
 
 interface User {
@@ -104,9 +107,50 @@ export default function Sidebar({
         {/* DM Mode — Clean minimal view */}
         {isDMMode ? (
           <div className="sidebar-body">
+            <div className="search-wrap" style={{ margin: "10px 12px", background: "rgba(0,0,0,0.2)", border: "none" }}>
+              <input
+                type="text" placeholder="Find or start a conversation"
+                className="search-input" id="dm-search"
+                style={{ fontSize: "12px", padding: "6px" }}
+              />
+            </div>
+            <div className="dm-list">
+              <div className="section-header">
+                <span className="section-label">Direct Messages</span>
+              </div>
+              <div className="section-content">
+                {channels.length > 0 ? (
+                  channels.map((channel) => {
+                    const isActive = pathname === `/dm/${channel.targetUserId}`;
+                    return (
+                      <Link 
+                        key={channel.id} 
+                        href={`/dm/${channel.targetUserId}`}
+                        className={`dm-item ${isActive ? "active" : ""}`}
+                      >
+                        <div className="dm-avatar">
+                          {channel.icon ? (
+                            <img src={channel.icon} alt={channel.name} />
+                          ) : (
+                            <div className="avatar-fallback">{channel.name[0]?.toUpperCase()}</div>
+                          )}
+                          <div className={`status-dot ${channel.isOnline ? "online" : "offline"}`} />
+                        </div>
+                        <span className="dm-name">{channel.name}</span>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="empty-dms">
+                    <span>No active conversations yet</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <div className="dm-info-card">
-              <Lock size={14} />
-              <span>End-to-end encrypted messages</span>
+              <Lock size={12} />
+              <span>End-to-end encrypted</span>
             </div>
             <div className="section section--bottom" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-secondary)' }}>
               <button 
@@ -312,6 +356,44 @@ export default function Sidebar({
         .browse-btn:hover {
           background: var(--bg-hover); color: var(--accent-gold);
           border-color: rgba(168, 85, 247, 0.20);
+        }
+        .dm-list { padding: 4px 0; }
+        .dm-item {
+          display: flex; align-items: center; gap: 10px;
+          padding: 8px 14px; margin: 2px 8px;
+          border-radius: var(--radius-md); text-decoration: none;
+          color: var(--text-secondary); transition: all 0.2s ease;
+        }
+        .dm-item:hover {
+          background: rgba(255,255,255,0.05); color: var(--text-primary);
+        }
+        .dm-item.active {
+          background: var(--bg-hover); color: var(--text-primary);
+        }
+        .dm-avatar {
+          position: relative; width: 32px; height: 32px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .dm-avatar img {
+          width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+        }
+        .avatar-fallback {
+          width: 100%; height: 100%; border-radius: 50%;
+          background: var(--gradient-primary); color: white;
+          display: flex; align-items: center; justify-content: center;
+          font-weight: 700; font-family: "Bubblegum Sans", cursive; font-size: 14px;
+        }
+        .status-dot {
+          position: absolute; bottom: 0; right: 0;
+          width: 10px; height: 10px; border-radius: 50%;
+          border: 2px solid var(--bg-secondary);
+        }
+        .status-dot.online { background: var(--accent-emerald); }
+        .status-dot.offline { background: var(--text-muted); }
+        .dm-name { font-size: 14px; font-weight: 500; }
+        .empty-dms {
+          padding: 16px; text-align: center; color: var(--text-muted);
+          font-size: 12px; font-style: italic;
         }
         @media (max-width: 768px) {
           .mobile-toggle { display: flex; }

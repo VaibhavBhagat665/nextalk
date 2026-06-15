@@ -12,12 +12,14 @@ interface Channel {
   name: string;
   icon: string;
   type?: string;
-  description: string | null;
-  isPrivate: boolean;
-  isDM: boolean;
-  lastMessage: { content: string; createdAt: string } | null;
-  role: string;
+  description?: string | null;
+  isPrivate?: boolean;
+  isDM?: boolean;
+  lastMessage?: { content: string; createdAt: string } | null;
+  role?: string;
   voiceUsers?: { id: string; username: string; imageUrl: string | null; muted: boolean }[];
+  targetUserId?: string;
+  isOnline?: boolean;
 }
 
 export default function ChannelList({

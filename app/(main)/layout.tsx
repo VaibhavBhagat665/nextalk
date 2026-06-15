@@ -95,9 +95,39 @@ export default async function MainLayout({
           voiceUsers: [] as { id: string; username: string; imageUrl: string | null; muted: boolean }[],
         }));
 
+      const dmChannelIds = memberships.filter((m) => m.channel.isDM).map((m) => m.channel.id);
+      let dmChannelsWithUsers: any[] = [];
+      
+      if (dmChannelIds.length > 0) {
+        const dmMemberships = await prisma.membership.findMany({
+          where: { channelId: { in: dmChannelIds } },
+          include: { user: true },
+        });
+        
+        const dmChannelMap = new Map();
+        for (const m of dmMemberships) {
+          if (!dmChannelMap.has(m.channelId)) {
+            dmChannelMap.set(m.channelId, { members: [] });
+          }
+          dmChannelMap.get(m.channelId).members.push(m.user);
+        }
+        
+        for (const [channelId, data] of dmChannelMap.entries()) {
+          const otherUser = data.members.find((u: any) => u.id !== user!.id) || user;
+          dmChannelsWithUsers.push({
+            id: channelId,
+            name: otherUser.username,
+            icon: otherUser.imageUrl || "",
+            isDM: true,
+            targetUserId: otherUser.id,
+            isOnline: false, // Optional: handle presence later
+          });
+        }
+      }
+
       layoutContent = (
         <Suspense fallback={<div className="loading-state">Loading workspace...</div>}>
-          <AppShell servers={servers} channels={channels} currentUser={user}>
+          <AppShell servers={servers} channels={channels} dmChannels={dmChannelsWithUsers} currentUser={user}>
             {children}
           </AppShell>
         </Suspense>
