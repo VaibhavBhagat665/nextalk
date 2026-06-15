@@ -18,6 +18,7 @@ export default function AppShell({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const requestedServerId = searchParams.get("server");
+  const isDMMode = pathname.startsWith("/dm");
   
   let activeServerId = requestedServerId && servers.find((s) => s.id === requestedServerId)
     ? requestedServerId
@@ -31,9 +32,15 @@ export default function AppShell({
     }
   }
 
+  // Force no active server in DM mode
+  if (isDMMode) {
+    activeServerId = null;
+  }
+
   const activeServer = activeServerId ? servers.find((s) => s.id === activeServerId) : undefined;
 
   const filteredChannels = channels.filter((m) => {
+    if (isDMMode) return false; // No channels in DM mode
     if (activeServerId) return m.serverId === activeServerId;
     return !m.serverId; // DMs
   });
@@ -52,6 +59,7 @@ export default function AppShell({
         serverName={activeServer?.name}
         serverId={activeServerId}
         serverInviteCode={activeServer?.inviteCode}
+        isDMMode={isDMMode}
       />
       <div className="col-separator" />
       <main className="app-main">

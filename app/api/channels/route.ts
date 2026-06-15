@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
 // GET /api/channels — list user's channels
-export async function GET() {
+export async function GET(req: Request) {
   const { userId: clerkId } = await auth();
   if (!clerkId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,8 +14,15 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  // Check if requesting DM channels specifically
+  const url = new URL(req.url);
+  const dmOnly = url.searchParams.get("dm") === "true";
+
   const memberships = await prisma.membership.findMany({
-    where: { userId: user.id },
+    where: {
+      userId: user.id,
+      channel: dmOnly ? { isDM: true } : undefined,
+    },
     include: {
       channel: {
         include: {
@@ -25,11 +32,49 @@ export async function GET() {
             orderBy: { createdAt: "desc" },
             select: { content: true, createdAt: true },
           },
+          memberships: dmOnly
+            ? {
+                where: { userId: { not: user.id } },
+                include: {
+                  user: {
+                    select: {
+                      id: true,
+                      username: true,
+                      imageUrl: true,
+                    },
+                  },
+                },
+                take: 1,
+              }
+            : false,
         },
       },
     },
     orderBy: { channel: { updatedAt: "desc" } },
   });
+
+  // If DM mode, format as DM conversations
+  if (dmOnly) {
+    const dms = memberships
+      .filter((m) => m.channel.isDM)
+      .map((m) => {
+        const otherUser = (m.channel as any).memberships?.[0]?.user;
+        return {
+          id: m.channel.id,
+          user: otherUser
+            ? {
+                id: otherUser.id,
+                username: otherUser.username,
+                imageUrl: otherUser.imageUrl,
+                isOnline: false, // Would need presence system for real status
+              }
+            : { id: "unknown", username: "Unknown User", imageUrl: null, isOnline: false },
+          lastMessage: m.channel.messages[0] || null,
+          unreadCount: 0, // Would need unread tracking
+        };
+      });
+    return NextResponse.json({ dms });
+  }
 
   const channels = memberships.map((m) => ({
     ...m.channel,

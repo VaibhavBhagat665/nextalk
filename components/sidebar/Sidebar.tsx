@@ -9,6 +9,7 @@ import OnlineUsers from "./OnlineUsers";
 import {
   Plus, Compass, ChevronDown, ChevronRight,
   Search, Menu, X, Hash, Volume2, Copy, Check, Smartphone,
+  MessageSquare, Lock,
 } from "lucide-react";
 import DownloadAppDialog from "./DownloadAppDialog";
 
@@ -39,12 +40,14 @@ export default function Sidebar({
   serverName,
   serverId,
   serverInviteCode,
+  isDMMode,
 }: {
   channels: Channel[];
   currentUser: User;
   serverName?: string;
   serverId?: string | null;
   serverInviteCode?: string;
+  isDMMode?: boolean;
 }) {
   const pathname = usePathname();
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -79,109 +82,139 @@ export default function Sidebar({
       {mobileOpen && <div className="sidebar-overlay" onClick={() => setMobileOpen(false)} />}
 
       <aside className={`sidebar ${mobileOpen ? "sidebar--open" : ""}`}>
-        {/* Server Header */}
+        {/* Header */}
         <div className="sidebar-header">
-          <h2 className="server-name">{serverName || "NexTalk"}</h2>
-          {serverInviteCode && (
-            <button className="invite-btn" onClick={copyInvite} data-tooltip="Copy invite code">
-              {copied ? <Check size={13} /> : <Copy size={13} />}
-            </button>
+          {isDMMode ? (
+            <>
+              <div className="dm-header-icon"><MessageSquare size={16} /></div>
+              <h2 className="server-name">Direct Messages</h2>
+            </>
+          ) : (
+            <>
+              <h2 className="server-name">{serverName || "NexTalk"}</h2>
+              {serverInviteCode && (
+                <button className="invite-btn" onClick={copyInvite} data-tooltip="Copy invite code">
+                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                </button>
+              )}
+            </>
           )}
         </div>
 
-        {/* Search */}
-        <div className="sidebar-search">
-          <div className="search-wrap">
-            <Search size={13} />
-            <input
-              type="text" placeholder="Search channels..."
-              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              className="search-input" id="sidebar-search"
-            />
-          </div>
-        </div>
-
-        <div className="sidebar-body">
-          {/* Text Channels */}
-          <div className="section">
-            <div className="section-header" onClick={() => setTextOpen(!textOpen)} role="button" tabIndex={0} id="toggle-text-channels">
-              {textOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              <Hash size={11} />
-              <span className="section-label">Text Channels</span>
-              <span className="section-count">{textChannels.length}</span>
-              <span className="section-action" role="button" tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true); }}
-                data-tooltip="Create channel" id="create-channel-btn">
-                <Plus size={13} />
-              </span>
+        {/* DM Mode — Clean minimal view */}
+        {isDMMode ? (
+          <div className="sidebar-body">
+            <div className="dm-info-card">
+              <Lock size={14} />
+              <span>End-to-end encrypted messages</span>
             </div>
-            {textOpen && (
-              <div className="section-content">
-                {textChannels.length > 0 ? (
-                  <ChannelList channels={textChannels} currentPath={pathname} />
-                ) : (
-                  <div className="empty-channels"><Hash size={14} /><span>No text channels</span></div>
+            <div className="section section--bottom" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-secondary)' }}>
+              <button 
+                className="btn-primary" 
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '8px 0', fontSize: '12px' }}
+                onClick={() => setShowDownloadApp(true)}
+              >
+                <Smartphone size={14} /> Get Mobile App
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Search */}
+            <div className="sidebar-search">
+              <div className="search-wrap">
+                <Search size={13} />
+                <input
+                  type="text" placeholder="Search channels..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  className="search-input" id="sidebar-search"
+                />
+              </div>
+            </div>
+
+            <div className="sidebar-body">
+              {/* Text Channels */}
+              <div className="section">
+                <div className="section-header" onClick={() => setTextOpen(!textOpen)} role="button" tabIndex={0} id="toggle-text-channels">
+                  {textOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                  <Hash size={11} />
+                  <span className="section-label">Text Channels</span>
+                  <span className="section-count">{textChannels.length}</span>
+                  <span className="section-action" role="button" tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true); }}
+                    data-tooltip="Create channel" id="create-channel-btn">
+                    <Plus size={13} />
+                  </span>
+                </div>
+                {textOpen && (
+                  <div className="section-content">
+                    {textChannels.length > 0 ? (
+                      <ChannelList channels={textChannels} currentPath={pathname} />
+                    ) : (
+                      <div className="empty-channels"><Hash size={14} /><span>No text channels</span></div>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* Voice Channels */}
-          <div className="section">
-            <div className="section-header" onClick={() => setVoiceOpen(!voiceOpen)} role="button" tabIndex={0} id="toggle-voice-channels">
-              {voiceOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              <Volume2 size={11} />
-              <span className="section-label">Voice Channels</span>
-              <span className="section-count">{voiceChannels.length}</span>
-              <span className="section-action" role="button" tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true); }}
-                data-tooltip="Create voice channel" id="create-voice-channel-btn">
-                <Plus size={13} />
-              </span>
-            </div>
-            {voiceOpen && (
-              <div className="section-content">
-                {voiceChannels.length > 0 ? (
-                  <ChannelList channels={voiceChannels} currentPath={pathname} isVoice />
-                ) : (
-                  <div className="empty-channels"><Volume2 size={14} /><span>No voice channels</span></div>
+              {/* Voice Channels */}
+              <div className="section">
+                <div className="section-header" onClick={() => setVoiceOpen(!voiceOpen)} role="button" tabIndex={0} id="toggle-voice-channels">
+                  {voiceOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                  <Volume2 size={11} />
+                  <span className="section-label">Voice Channels</span>
+                  <span className="section-count">{voiceChannels.length}</span>
+                  <span className="section-action" role="button" tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true); }}
+                    data-tooltip="Create voice channel" id="create-voice-channel-btn">
+                    <Plus size={13} />
+                  </span>
+                </div>
+                {voiceOpen && (
+                  <div className="section-content">
+                    {voiceChannels.length > 0 ? (
+                      <ChannelList channels={voiceChannels} currentPath={pathname} isVoice />
+                    ) : (
+                      <div className="empty-channels"><Volume2 size={14} /><span>No voice channels</span></div>
+                    )}
+                    <button className="browse-btn" onClick={() => setShowBrowseChannels(true)} id="browse-channels-btn">
+                      <Compass size={12} /><span>Browse Channels</span>
+                    </button>
+                  </div>
                 )}
-                <button className="browse-btn" onClick={() => setShowBrowseChannels(true)} id="browse-channels-btn">
-                  <Compass size={12} /><span>Browse Channels</span>
+              </div>
+
+              {/* Online Users */}
+              <div className="section">
+                <div className="section-header" onClick={() => setOnlineOpen(!onlineOpen)} role="button" tabIndex={0} id="toggle-online">
+                  {onlineOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                  <span className="section-label">Online</span>
+                </div>
+                {onlineOpen && (
+                  <div className="section-content">
+                    <OnlineUsers currentUserId={currentUser.id} />
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile App Download */}
+              <div className="section section--bottom" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-secondary)' }}>
+                <button 
+                  className="btn-primary" 
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '8px 0', fontSize: '12px' }}
+                  onClick={() => setShowDownloadApp(true)}
+                >
+                  <Smartphone size={14} /> Get Mobile App
                 </button>
               </div>
-            )}
-          </div>
-
-        {/* Online Users */}
-        <div className="section">
-          <div className="section-header" onClick={() => setOnlineOpen(!onlineOpen)} role="button" tabIndex={0} id="toggle-online">
-            {onlineOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-            <span className="section-label">Online</span>
-          </div>
-          {onlineOpen && (
-            <div className="section-content">
-              <OnlineUsers currentUserId={currentUser.id} />
             </div>
-          )}
-        </div>
+          </>
+        )}
 
-        {/* Mobile App Download */}
-        <div className="section section--bottom" style={{ padding: '12px 16px', borderTop: '1px solid var(--border-secondary)' }}>
-          <button 
-            className="btn-primary" 
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '8px 0', fontSize: '12px' }}
-            onClick={() => setShowDownloadApp(true)}
-          >
-            <Smartphone size={14} /> Get Mobile App
-          </button>
-        </div>
-      </div>
-
-      {showCreateChannel && <CreateChannelDialog onClose={() => setShowCreateChannel(false)} serverId={serverId} />}
-      {showBrowseChannels && <BrowseChannelsDialog onClose={() => setShowBrowseChannels(false)} />}
-      {showDownloadApp && <DownloadAppDialog onClose={() => setShowDownloadApp(false)} />}
-    </aside>
+        {showCreateChannel && <CreateChannelDialog onClose={() => setShowCreateChannel(false)} serverId={serverId} />}
+        {showBrowseChannels && <BrowseChannelsDialog onClose={() => setShowBrowseChannels(false)} />}
+        {showDownloadApp && <DownloadAppDialog onClose={() => setShowDownloadApp(false)} />}
+      </aside>
 
       <style jsx>{`
         .mobile-toggle {
@@ -196,7 +229,11 @@ export default function Sidebar({
         }
         .sidebar-header {
           padding: 14px 16px 10px; border-bottom: 1px solid var(--border-secondary);
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex; align-items: center; justify-content: space-between; gap: 10px;
+        }
+        .dm-header-icon {
+          width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+          background: var(--accent-gold-dim); border-radius: 8px; color: var(--accent-gold); flex-shrink: 0;
         }
         .server-name {
           font-family: "Bubblegum Sans", cursive;
@@ -211,6 +248,13 @@ export default function Sidebar({
         .invite-btn:hover {
           background: var(--accent-gold-dim); color: var(--accent-gold);
           border-color: var(--accent-gold);
+        }
+        .dm-info-card {
+          display: flex; align-items: center; gap: 8px;
+          margin: 12px 12px 0; padding: 10px 14px;
+          background: rgba(52, 211, 153, 0.06); border: 1px solid rgba(52, 211, 153, 0.12);
+          border-radius: var(--radius-sm); font-size: 11px; font-weight: 600;
+          color: var(--accent-emerald); letter-spacing: 0.3px;
         }
         .sidebar-search { padding: 10px 12px 6px; }
         .search-wrap {

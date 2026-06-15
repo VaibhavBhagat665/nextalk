@@ -166,7 +166,7 @@ export default function ChannelList({
 
       <style jsx>{`
         .context-backdrop { position: fixed; inset: 0; z-index: 90; }
-        .channel-list { display: flex; flex-direction: column; gap: 2px; padding: 0 10px; }
+        .channel-list { display: flex; flex-direction: column; gap: 3px; padding: 0 8px; }
         .channel-item-wrap { position: relative; }
         .channel-more {
           position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
@@ -182,19 +182,30 @@ export default function ChannelList({
           cursor: pointer; transition: all 0.2s var(--ease-smooth);
           text-decoration: none; color: var(--text-secondary);
           position: relative; animation: fadeIn 0.35s var(--ease-smooth) backwards;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.03);
         }
-        .channel-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-        .channel-item--active { background: var(--bg-active); color: var(--text-primary); }
+        .channel-item:hover {
+          background: var(--bg-hover); color: var(--text-primary);
+          border-color: rgba(168, 85, 247, 0.08);
+          transform: translateX(2px);
+        }
+        .channel-item--active {
+          background: rgba(168, 85, 247, 0.08); color: var(--text-primary);
+          border-color: rgba(168, 85, 247, 0.15);
+          box-shadow: 0 0 12px rgba(168, 85, 247, 0.06);
+        }
         .channel-item--leaving { opacity: 0.4; pointer-events: none; }
-        .channel-item--voice:hover { background: rgba(34, 211, 238, 0.06); }
+        .channel-item--voice { border-color: rgba(34, 211, 238, 0.05); }
+        .channel-item--voice:hover { background: rgba(34, 211, 238, 0.06); border-color: rgba(34, 211, 238, 0.12); }
         .active-indicator {
-          position: absolute; left: -10px; top: 50%; transform: translateY(-50%);
+          position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
           width: 3px; height: 22px; background: var(--gradient-primary);
           border-radius: 0 4px 4px 0; box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
         }
         .channel-icon {
           width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-          background: rgba(168, 85, 247, 0.06); border-radius: 10px;
+          background: rgba(168, 85, 247, 0.08); border-radius: 10px;
           font-size: 14px; flex-shrink: 0; color: var(--text-muted); transition: all 0.2s ease;
         }
         .channel-icon--active {

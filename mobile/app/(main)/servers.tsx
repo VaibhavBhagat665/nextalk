@@ -19,7 +19,8 @@ type Server = {
   name: string;
   icon: string | null;
   ownerId: string;
-  _count?: { members: number; channels: number };
+  memberCount?: number;
+  channelCount?: number;
 };
 
 export default function ServersScreen() {
@@ -98,7 +99,7 @@ export default function ServersScreen() {
               <GlassCard variant="gold" style={styles.statCard}>
                 <Hash size={20} color={colors.accentCyan} />
                 <Text style={[styles.statValue, { color: colors.textPrimary, fontFamily: 'Fredoka-Bold' }]}>
-                  {servers.reduce((a, s) => a + (s._count?.channels || 0), 0)}
+                  {servers.reduce((a, s) => a + (s.channelCount || 0), 0)}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary, fontFamily: 'ComicNeue-Regular' }]}>
                   Channels
@@ -107,7 +108,7 @@ export default function ServersScreen() {
               <GlassCard variant="gold" style={styles.statCard}>
                 <Crown size={20} color={colors.accentAmber} />
                 <Text style={[styles.statValue, { color: colors.textPrimary, fontFamily: 'Fredoka-Bold' }]}>
-                  {servers.reduce((a, s) => a + (s._count?.members || 0), 0)}
+                  {servers.reduce((a, s) => a + (s.memberCount || 0), 0)}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.textTertiary, fontFamily: 'ComicNeue-Regular' }]}>
                   Members
@@ -144,23 +145,23 @@ export default function ServersScreen() {
                   {item.name}
                 </Text>
                 <View style={styles.serverMeta}>
-                  {item._count && (
+                  {(item.memberCount || item.channelCount) ? (
                     <>
                       <View style={styles.metaItem}>
                         <Users size={12} color={colors.textMuted} />
                         <Text style={[styles.metaText, { color: colors.textMuted, fontFamily: 'ComicNeue-Regular' }]}>
-                          {item._count.members}
+                          {item.memberCount || 0}
                         </Text>
                       </View>
                       <View style={[styles.metaDot, { backgroundColor: colors.borderPrimary }]} />
                       <View style={styles.metaItem}>
                         <Hash size={12} color={colors.textMuted} />
                         <Text style={[styles.metaText, { color: colors.textMuted, fontFamily: 'ComicNeue-Regular' }]}>
-                          {item._count.channels}
+                          {item.channelCount || 0}
                         </Text>
                       </View>
                     </>
-                  )}
+                  ) : null}
                 </View>
               </View>
               <ChevronRight size={20} color={colors.textMuted} />

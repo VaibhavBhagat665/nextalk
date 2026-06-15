@@ -55,14 +55,40 @@ export default function UserProfileModal({ userId, visible, onClose }: Props) {
     loadProfile();
   }, [userId, visible]);
 
-  const handleMessage = () => {
+  const handleMessage = async () => {
     if (!profile) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
-    // Use setTimeout to allow modal to close smoothly before navigating
-    setTimeout(() => {
-      router.push(`/(main)/chat/${profile.id}`);
-    }, 100);
+    
+    try {
+      // Create or get the DM channel first
+      const token = await getToken();
+      if (!token) return;
+      
+      const res = await fetchApi('/api/channels', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: `dm-${profile.id}`,
+          isDM: true,
+          targetUserId: profile.id,
+        }),
+      });
+      
+      // Navigate to the DM channel
+      setTimeout(() => {
+        router.push(`/(main)/chat/${res.id}`);
+      }, 100);
+    } catch (err) {
+      console.error('Failed to create DM channel:', err);
+      // Fallback: navigate to DM tab
+      setTimeout(() => {
+        router.push('/(main)/dm');
+      }, 100);
+    }
   };
 
   if (!visible) return null;

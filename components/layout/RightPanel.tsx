@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import AISummaryPanel from "@/components/chat/AISummaryPanel";
+import UserProfileModal from "@/components/modals/UserProfileModal";
 
 interface ChannelInfo {
   id: string;
@@ -38,6 +39,7 @@ export default function RightPanel({
 }) {
   const { user } = useUser();
   const [activeTab, setActiveTab] = useState<"profile" | "members" | "ai">("profile");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -46,6 +48,12 @@ export default function RightPanel({
     { id: "members" as const, label: "Members", icon: Users },
     { id: "ai" as const, label: "AI", icon: Sparkles },
   ];
+
+  const handleMemberClick = (memberId: string) => {
+    // Don't open profile for yourself
+    if (user?.id === memberId) return;
+    setSelectedUserId(memberId);
+  };
 
   return (
     <aside className="right-panel animate-slide-in-right">
@@ -141,7 +149,14 @@ export default function RightPanel({
               </h4>
               <div className="member-list">
                 {channel?.members?.map((member) => (
-                  <div key={member.id} className="member-item" id={`member-${member.id}`}>
+                  <div
+                    key={member.id}
+                    className="member-item"
+                    id={`member-${member.id}`}
+                    onClick={() => handleMemberClick(member.id)}
+                    role="button"
+                    tabIndex={0}
+                  >
                     <div className="member-avatar-wrap">
                       {member.imageUrl ? (
                         <Image
@@ -187,6 +202,11 @@ export default function RightPanel({
           </div>
         )}
       </div>
+
+      {/* User Profile Modal */}
+      {selectedUserId && (
+        <UserProfileModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />
+      )}
 
       <style jsx>{`
         .right-panel {
@@ -408,12 +428,19 @@ export default function RightPanel({
           gap: 10px;
           padding: 8px 10px;
           border-radius: var(--radius-sm);
-          transition: background-color 0.15s ease;
-          cursor: default;
+          transition: all 0.15s ease;
+          cursor: pointer;
+          border: 1px solid transparent;
         }
 
         .member-item:hover {
           background: var(--bg-hover);
+          border-color: rgba(168, 85, 247, 0.08);
+          transform: translateX(2px);
+        }
+
+        .member-item:active {
+          transform: translateX(2px) scale(0.98);
         }
 
         .member-avatar-wrap {

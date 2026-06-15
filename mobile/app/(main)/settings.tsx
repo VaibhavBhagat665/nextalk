@@ -11,7 +11,7 @@ import { radius } from '../../lib/theme';
 import { Moon, Sun, LogOut, Bell, Shield, Globe, Monitor, Laptop, Check, Volume2, BellOff, Eye, Lock, Clock, Calendar, ChevronRight, User as UserIcon } from 'lucide-react-native';
 
 export default function SettingsScreen() {
-  const { signOut } = useAuth();
+  const { signOut, getToken } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const colors = useAppStore((s) => s.colors);
@@ -30,7 +30,25 @@ export default function SettingsScreen() {
     if (!user || usernameInput === (user.username || user.firstName)) return;
     setIsUpdatingProfile(true);
     try {
+      // Update Clerk first
       await user.update({ username: usernameInput });
+      
+      // Also update the DB username via API
+      const token = await getToken();
+      if (token) {
+        await fetch(
+          `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.100:3000'}/api/settings`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ username: usernameInput }),
+          }
+        );
+      }
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error('Failed to update username:', err);

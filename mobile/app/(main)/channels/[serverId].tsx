@@ -41,9 +41,10 @@ export default function ChannelsScreen() {
       const token = await getToken();
       if (!token) return;
       const data = await fetchApi(`/api/servers/${serverId}`, { headers: { Authorization: `Bearer ${token}` } });
+      // API returns server object at root level with channels nested
       setChannels(data.channels || []);
-      setServerName(data.server?.name || 'Server');
-      setInviteCode(data.server?.inviteCode || null);
+      setServerName(data.name || 'Server');
+      setInviteCode(data.inviteCode || null);
     } catch (err) { console.error(err); } finally { setLoading(false); setRefreshing(false); }
   };
 

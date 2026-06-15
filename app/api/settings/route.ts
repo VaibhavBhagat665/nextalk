@@ -56,6 +56,7 @@ export async function PATCH(req: Request) {
 
   if (body.language !== undefined) userFields.language = body.language;
   if (body.statusMessage !== undefined) userFields.statusMessage = body.statusMessage;
+  if (body.username !== undefined) userFields.username = body.username;
 
   const settingsKeys = [
     "desktopNotifications", "soundAlerts", "muteAll", "dmNotificationsOnly",
