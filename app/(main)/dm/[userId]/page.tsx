@@ -58,15 +58,15 @@ export default function DMPage() {
 
         // 2. Fetch target user's public key
         const targetRes = await fetch(`/api/users/${targetUserId}/key`);
-        if (!targetRes.ok) {
-          throw new Error("Target user has not set up encryption yet.");
+        if (targetRes.ok) {
+          const targetData = await targetRes.json();
+          if (targetData.publicKey) {
+            const targetPublicKey = await importPublicKey(targetData.publicKey);
+            // 3. Derive shared key
+            const derived = await deriveSharedKey(localKeys.privateKey, targetPublicKey);
+            setSharedKey(derived);
+          }
         }
-        const targetData = await targetRes.json();
-        const targetPublicKey = await importPublicKey(targetData.publicKey);
-
-        // 3. Derive shared key
-        const derived = await deriveSharedKey(localKeys.privateKey, targetPublicKey);
-        setSharedKey(derived);
 
         // 4. Create/get DM channel
         const res = await fetch("/api/channels", {
@@ -96,7 +96,7 @@ export default function DMPage() {
 
   // Fetch and decrypt message history
   useEffect(() => {
-    if (!channelId || !sharedKey) return;
+    if (!channelId) return;
 
     setLoadingHistory(true);
     fetch(`/api/messages?channelId=${channelId}&limit=50`)
@@ -106,8 +106,13 @@ export default function DMPage() {
         const decryptedMessages = await Promise.all(
           data.messages.map(async (m: any) => {
             let content = m.content;
-            if (m.encrypted && m.iv) {
-              content = await decryptMessage(m.content, m.iv, sharedKey);
+            if (m.encrypted && m.iv && sharedKey) {
+              try {
+                content = await decryptMessage(m.content, m.iv, sharedKey);
+              } catch (err) {
+                console.error("Failed to decrypt message:", err);
+                content = "[Encrypted Message]";
+              }
             }
             return {
               id: m.id,
@@ -152,28 +157,35 @@ export default function DMPage() {
   }, [messages, sharedKey]);
 
   const handleSend = async (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
-    if (!channelId || !sharedKey) return;
+    if (!channelId) return;
 
-    // 1. Encrypt message locally
-    const { ciphertext, iv } = await encryptMessage(content, sharedKey);
+    let finalContent = content;
+    let isEncrypted = false;
+    let currentIv: string | undefined;
+
+    // 1. Encrypt message locally if we have a shared key
+    if (sharedKey) {
+      const { ciphertext, iv } = await encryptMessage(content, sharedKey);
+      finalContent = ciphertext;
+      isEncrypted = true;
+      currentIv = iv;
+    }
 
     // 2. Send via socket (Optimistically show plaintext locally)
-    // Note: To be fully secure, the socket should broadcast the ciphertext and the receiver decrypts it.
-    // For this implementation, we're optimizing the REST layer for E2E storage, and using the socket for real-time delivery.
     sendMessage(content, fileUrl, fileName, fileType); 
 
-    // 3. Persist ciphertext via REST
+    // 3. Persist via REST
     await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         channelId, 
-        content: ciphertext, 
+        content: finalContent, 
         fileUrl, 
         fileName, 
         fileType,
-        encrypted: true,
-        iv,
+        encrypted: isEncrypted,
+        iv: currentIv || null,
         dmToUserId: targetUserId
       }),
     });
@@ -218,9 +230,15 @@ export default function DMPage() {
           <div>
             <h1 className="header-name">Direct Message</h1>
             <div className="header-badges">
-              <span className="e2e-badge">
-                <Lock size={10} /> End-to-End Encrypted
-              </span>
+              {sharedKey ? (
+                <span className="e2e-badge">
+                  <Lock size={10} /> End-to-End Encrypted
+                </span>
+              ) : (
+                <span className="e2e-badge" style={{ color: "var(--text-muted)" }}>
+                  Standard Connection
+                </span>
+              )}
             </div>
           </div>
         </div>
