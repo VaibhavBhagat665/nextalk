@@ -194,9 +194,24 @@ export function useSocket(channelId: string | null) {
   const sendMessage = useCallback(
     (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
       const socket = getSocket();
-      if (!socket?.connected || !channelId || !userId) return;
+      if (!socket?.connected || !channelId || !userId || !user) return;
 
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+      const optimisticMessage: Message = {
+        tempId,
+        content,
+        userId,
+        username: user.username || user.firstName || "User",
+        imageUrl: user.imageUrl || "",
+        channelId,
+        fileUrl,
+        fileName,
+        fileType,
+        createdAt: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
 
       socket.emit("message:send", {
         channelId,
@@ -207,7 +222,7 @@ export function useSocket(channelId: string | null) {
         tempId,
       });
     },
-    [channelId, userId]
+    [channelId, userId, user]
   );
 
   // Typing indicators
