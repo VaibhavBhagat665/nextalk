@@ -191,33 +191,7 @@ export default function DMPage() {
     });
   };
 
-  if (initializing) {
-    return (
-      <div className="dm-loading">
-        <div className="encryption-loader">
-          <Lock size={24} className="text-gold" />
-          <Loader2 size={16} className="spin text-gold" style={{ position: "absolute", bottom: -8, right: -8 }} />
-        </div>
-        <p>Establishing secure connection...</p>
-        <style jsx>{`
-          .dm-loading { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; color:var(--text-tertiary); background:var(--bg-primary); }
-          .encryption-loader { position:relative; width:48px; height:48px; display:flex; align-items:center; justify-content:center; background:var(--accent-gold-dim); border-radius:50%; box-shadow:var(--shadow-glow); }
-          .text-gold { color:var(--accent-gold); }
-          :global(.spin) { animation: spin 1s linear infinite; }
-          @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        `}</style>
-      </div>
-    );
-  }
 
-  if (cryptoError) {
-    return (
-      <div className="dm-loading">
-        <Lock size={32} style={{ color: "var(--accent-rose)" }} />
-        <p style={{ color: "var(--accent-rose)", marginTop: 8 }}>{cryptoError}</p>
-      </div>
-    );
-  }
 
   return (
     <div className="dm-page">
@@ -254,9 +228,8 @@ export default function DMPage() {
 
           <div className="divider" />
 
-          <div className="connection-status">
+          <div className="connection-status" title={isConnected ? "Connected" : "Connecting..."}>
             <div className={isConnected ? "online-dot" : "offline-dot"} />
-            <span>{isConnected ? "Connected" : "Reconnecting..."}</span>
           </div>
         </div>
       </header>
@@ -266,7 +239,7 @@ export default function DMPage() {
         {loadingHistory ? (
           <div className="loading-state">
             <Loader2 size={32} className="spin text-gold" />
-            <p>Decrypting history...</p>
+            <p>Loading messages...</p>
           </div>
         ) : (
           <MessageList messages={messages} currentUserId={user?.id || ""} onReact={reactToMessage} />
