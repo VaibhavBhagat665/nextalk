@@ -2,6 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { decrypt } from "@/lib/encryption";
+import { getMessagesCursor } from "@/lib/cursor-pagination";
+import { getCachedMessages, setCachedMessages } from "@/lib/message-cache";
 
 // GET /api/messages?channelId=xxx&cursor=xxx&limit=30
 export async function GET(req: Request) {
@@ -12,8 +14,8 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const channelId = searchParams.get("channelId");
-  const cursor = searchParams.get("cursor");
-  const limit = parseInt(searchParams.get("limit") || "30");
+  const cursor = searchParams.get("cursor") || undefined;
+  const limit = parseInt(searchParams.get("limit") || "50");
 
   if (!channelId) {
     return NextResponse.json({ error: "channelId is required" }, { status: 400 });
@@ -31,43 +33,53 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not a member of this channel" }, { status: 403 });
   }
 
-  const messages = await prisma.message.findMany({
-    where: { channelId, isDeleted: false },
-    take: limit + 1,
-    ...(cursor && {
-      cursor: { id: cursor },
-      skip: 1,
-    }),
-    orderBy: { createdAt: "desc" },
-    include: {
-      user: {
-        select: { id: true, username: true, imageUrl: true, clerkId: true },
-      },
-      reactions: {
-        include: {
-          user: { select: { id: true, username: true } },
-        },
-      },
-    },
+  // Try cache first (only for first page, no cursor)
+  if (!cursor) {
+    const cachedMessages = await getCachedMessages(channelId);
+    if (cachedMessages !== null) {
+      // Decrypt cached messages
+      const decryptedCached = await Promise.all(
+        cachedMessages.slice(0, limit).map(async (m: any) => ({
+          ...m,
+          content: await decrypt(m.content),
+        }))
+      );
+
+      return NextResponse.json({
+        messages: decryptedCached,
+        nextCursor: cachedMessages.length > limit ? cachedMessages[limit - 1]?.id : null,
+        hasMore: cachedMessages.length > limit,
+        cached: true,
+      });
+    }
+  }
+
+  // Cache miss or paginated request - fetch from database
+  const result = await getMessagesCursor(prisma, {
+    channelId,
+    cursor,
+    limit,
+    direction: "forward",
   });
 
-  let nextCursor: string | undefined;
-  if (messages.length > limit) {
-    const nextItem = messages.pop();
-    nextCursor = nextItem?.id;
+  // Cache first page results for future requests
+  if (!cursor && result.messages.length > 0) {
+    await setCachedMessages(channelId, result.messages);
   }
 
   // Decrypt messages
   const decryptedMessages = await Promise.all(
-    messages.map(async (m) => ({
+    result.messages.map(async (m: any) => ({
       ...m,
       content: await decrypt(m.content),
     }))
   );
 
   return NextResponse.json({
-    messages: decryptedMessages.reverse(),
-    nextCursor,
+    messages: decryptedMessages,
+    nextCursor: result.nextCursor,
+    hasMore: result.hasMore,
+    cached: false,
   });
 }
 
@@ -118,6 +130,10 @@ export async function POST(req: Request) {
     where: { id: channelId },
     data: { updatedAt: new Date() },
   });
+
+  // Invalidate cache for this channel since we added a new message
+  const { invalidateChannelCache } = await import("@/lib/message-cache");
+  await invalidateChannelCache(channelId);
 
   return NextResponse.json(message, { status: 201 });
 }

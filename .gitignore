@@ -58,3 +58,10 @@ DEPLOY_SETUP.md
 # more env files
 .env.production
 .env.socket
+
+# kiro IDE specs and configuration
+/.kiro/
+
+# project documentation and benchmarks (internal only)
+/docs/
+/benchmarks/

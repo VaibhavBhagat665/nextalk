@@ -4,6 +4,8 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import { PrismaClient } from "@prisma/client";
+import { latencyMiddleware } from "./latency-tracker";
+import { getAllMetrics, formatPrometheusMetrics } from "./metrics-service";
 
 const app = express();
 const server = createServer(app);
@@ -35,25 +37,69 @@ const io = new Server(server, {
 });
 
 // Redis adapter for horizontal scaling
+let redisConnected = false;
 if (REDIS_URL) {
   try {
     const pubClient = new Redis(REDIS_URL, {
       maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        console.log(`🔄 Redis reconnecting in ${delay}ms (attempt ${times})`);
+        return delay;
+      },
+      enableOfflineQueue: false,
     });
     const subClient = pubClient.duplicate();
 
-    pubClient.on("connect", () => console.log("✅ Redis pub client connected"));
+    pubClient.on("connect", () => {
+      console.log("✅ Redis pub client connected");
+      redisConnected = true;
+    });
+    
     subClient.on("connect", () => {
       console.log("✅ Redis sub client connected");
-      io.adapter(createAdapter(pubClient, subClient));
-      console.log("✅ Redis adapter attached");
+      try {
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log("✅ Redis adapter attached - horizontal scaling enabled");
+      } catch (err: any) {
+        console.error("❌ Failed to attach Redis adapter:", err.message);
+        redisConnected = false;
+      }
     });
 
-    pubClient.on("error", (err) => console.warn("⚠️  Redis pub error:", err.message));
-    subClient.on("error", (err) => console.warn("⚠️  Redis sub error:", err.message));
+    pubClient.on("error", (err) => {
+      console.warn("⚠️  Redis pub error:", err.message);
+      redisConnected = false;
+    });
+    
+    subClient.on("error", (err) => {
+      console.warn("⚠️  Redis sub error:", err.message);
+      redisConnected = false;
+    });
+
+    pubClient.on("close", () => {
+      console.warn("⚠️  Redis pub connection closed");
+      redisConnected = false;
+    });
+
+    subClient.on("close", () => {
+      console.warn("⚠️  Redis sub connection closed");
+      redisConnected = false;
+    });
+
+    // Handle graceful shutdown
+    process.on("SIGTERM", async () => {
+      console.log("🛑 SIGTERM received, closing Redis connections...");
+      await pubClient.quit();
+      await subClient.quit();
+      process.exit(0);
+    });
   } catch (err: any) {
-    console.warn("⚠️  Redis adapter failed, running single-instance:", err.message);
+    console.warn("⚠️  Redis adapter initialization failed, running in single-instance mode:", err.message);
+    redisConnected = false;
   }
+} else {
+  console.log("ℹ️  No REDIS_URL configured, running in single-instance mode");
 }
 
 // Presence tracking
@@ -118,6 +164,9 @@ async function verifyChannelMembership(
     return false;
   }
 }
+
+// Socket.io middleware — latency tracking
+io.use(latencyMiddleware);
 
 // Socket.io middleware — auth check
 io.use((socket, next) => {
@@ -409,7 +458,25 @@ io.on("connection", (socket) => {
 
 // Health check
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", connections: io.engine.clientsCount });
+  res.json({
+    status: "ok",
+    connections: io.engine.clientsCount,
+    redis: redisConnected ? "connected" : "disconnected",
+    mode: redisConnected ? "multi-instance" : "single-instance"
+  });
+});
+
+// Metrics endpoint (JSON format)
+app.get("/metrics/json", (_req, res) => {
+  const connections = io.engine.clientsCount;
+  res.json(getAllMetrics(connections));
+});
+
+// Metrics endpoint (Prometheus format)
+app.get("/metrics", (_req, res) => {
+  const connections = io.engine.clientsCount;
+  res.set("Content-Type", "text/plain");
+  res.send(formatPrometheusMetrics(connections));
 });
 
 const PORT = process.env.PORT || process.env.SOCKET_PORT || 3001;

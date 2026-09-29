@@ -12,14 +12,25 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "benchmark:baseline": "powershell -ExecutionPolicy Bypass -File ./benchmarks/run-baseline.ps1",
+    "benchmark:quick": "k6 run --vus 100 --duration 30s benchmarks/load-test.js",
+    "db:profile": "tsx benchmarks/profile-queries.ts",
+    "db:seed": "tsx prisma/seed-messages.ts",
+    "test:cross-instance": "tsx server/test-cross-instance.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.0",
     "@clerk/themes": "^2.4.57",
     "@prisma/client": "^6.9.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@tailwindcss/postcss": "^4",
     "@tanstack/react-query": "^5.75.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/react-window": "^1.8.8",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.6.0",
     "clsx": "^2.1.1",
@@ -28,6 +39,7 @@
     "groq-sdk": "^0.17.0",
     "ioredis": "^5.7.0",
     "lucide-react": "^0.510.0",
+    "mediasoup": "^3.27.1",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
     "qrcode.react": "^4.2.0",
@@ -38,21 +50,15 @@
     "socket.io-client": "^4.8.0",
     "svix": "^1.62.0",
     "tailwind-merge": "^3.3.0",
-    "zustand": "^5.0.0",
-    "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
-    "@types/express": "^5.0.0",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/react-window": "^1.8.8",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "prisma": "^6.9.0",
-    "tsx": "^4.19.0"
+    "tsx": "^4.23.15"
   }
 }

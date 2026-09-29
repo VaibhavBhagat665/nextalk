@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -120,6 +122,7 @@ model Membership {
 model Message {
   id         String   @id @default(cuid())
   content    String
+  embedding  Unsupported("vector(1536)")?  // OpenAI text-embedding-3-small dimension
   fileUrl    String?
   fileName   String?
   fileType   String?
@@ -138,7 +141,8 @@ model Message {
   channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
   reactions Reaction[]
 
-  @@index([channelId, createdAt])
+  @@index([channelId, createdAt])  // Composite index for sorted channel queries
+  @@index([channelId, id])          // Composite index for cursor pagination
   @@index([dmToUserId])
   @@index([userId])
 }
@@ -170,6 +174,7 @@ model AISummary {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([channelId, createdAt])
+  @@index([expiresAt])  // For cleanup jobs to remove expired summaries
 }
 
 model UserSettings {
@@ -211,6 +216,8 @@ model InviteLink {
 
   @@index([code])
   @@index([channelId])
+  @@index([expiresAt])  // For cleanup jobs to remove expired invites
+  @@index([isActive])   // For filtering active invites
 }
 
 model CallSession {
@@ -231,6 +238,8 @@ model CallSession {
   @@index([callerId])
   @@index([calleeId])
   @@index([channelId])
+  @@index([status])      // For filtering active/ringing calls
+  @@index([createdAt])   // For call history queries
 }
 
 model VoiceState {

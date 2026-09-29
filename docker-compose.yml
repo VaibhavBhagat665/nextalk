@@ -1,0 +1,185 @@
+# Docker Compose for Horizontal Scaling Test
+# Runs 3 Socket.io instances behind nginx with Redis pub/sub
+# Requirements: 1.8
+
+version: '3.8'
+
+services:
+  # ============================================================
+  # Redis for pub/sub across Socket.io instances
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: nextalk-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+
+  # ============================================================
+  # Socket.io Server Instance 1
+  # ============================================================
+  socket-server-1:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: nextalk-socket-1
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - UPSTASH_REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - INSTANCE_ID=socket-1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ============================================================
+  # Socket.io Server Instance 2
+  # ============================================================
+  socket-server-2:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: nextalk-socket-2
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - UPSTASH_REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - INSTANCE_ID=socket-2
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ============================================================
+  # Socket.io Server Instance 3
+  # ============================================================
+  socket-server-3:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: nextalk-socket-3
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - UPSTASH_REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - INSTANCE_ID=socket-3
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ============================================================
+  # nginx Load Balancer with Sticky Sessions
+  # ============================================================
+  nginx:
+    image: nginx:alpine
+    container_name: nextalk-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - socket-server-1
+      - socket-server-2
+      - socket-server-3
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  nextalk-network:
+    driver: bridge
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  redis-data:
+    driver: local
+
+# ============================================================
+# Usage Instructions
+# ============================================================
+# 
+# Start all services:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f
+#
+# View specific service logs:
+#   docker-compose logs -f socket-server-1
+#
+# Scale Socket.io instances:
+#   docker-compose up -d --scale socket-server-1=2
+#
+# Stop all services:
+#   docker-compose down
+#
+# Stop and remove volumes:
+#   docker-compose down -v
+#
+# Rebuild after code changes:
+#   docker-compose up -d --build
+#
+# Check service health:
+#   docker-compose ps
+#
+# ============================================================
+# Testing Cross-Instance Messaging
+# ============================================================
+#
+# 1. Connect Client A to http://localhost:8080 (nginx)
+# 2. Connect Client B to http://localhost:8080 (nginx)
+# 3. Clients may be routed to different Socket.io instances
+# 4. Messages should be delivered via Redis pub/sub
+# 5. Check logs to verify which instance each client connected to:
+#      docker-compose logs | grep "Client connected"
+#
+# ============================================================
