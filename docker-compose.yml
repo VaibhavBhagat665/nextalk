@@ -129,6 +129,47 @@ services:
       timeout: 3s
       retries: 3
 
+  # ============================================================
+  # coturn TURN Server (NAT Traversal for WebRTC)
+  # ============================================================
+  # TURN server helps clients behind strict NATs/firewalls
+  # establish WebRTC connections by relaying media traffic.
+  # Only needed when direct peer connections fail.
+  # ============================================================
+  turnserver:
+    image: coturn/coturn:latest
+    container_name: nextalk-turnserver
+    ports:
+      # STUN/TURN ports
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      # TURNS (TLS) ports
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      # Relay port range (can be limited for security)
+      - "49152-49252:49152-49252/udp"
+    volumes:
+      - ./docker/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - turnserver-logs:/var/log
+    environment:
+      # Set external IP (use your public IP in production)
+      - EXTERNAL_IP=${TURN_EXTERNAL_IP:-127.0.0.1}
+    # Override config with environment-based external IP
+    command: >
+      -c /etc/coturn/turnserver.conf
+      --external-ip=$$EXTERNAL_IP
+      --verbose
+    networks:
+      - nextalk-network
+    restart: unless-stopped
+    healthcheck:
+      # Simple UDP check on TURN port
+      test: ["CMD-SHELL", "nc -zu localhost 3478 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 # ============================================================
 # Networks
 # ============================================================
@@ -141,6 +182,8 @@ networks:
 # ============================================================
 volumes:
   redis-data:
+    driver: local
+  turnserver-logs:
     driver: local
 
 # ============================================================
@@ -181,5 +224,30 @@ volumes:
 # 4. Messages should be delivered via Redis pub/sub
 # 5. Check logs to verify which instance each client connected to:
 #      docker-compose logs | grep "Client connected"
+#
+# ============================================================
+# Testing TURN Server
+# ============================================================
+#
+# 1. Start services including TURN server:
+#      docker-compose up -d
+#
+# 2. Check TURN server logs:
+#      docker-compose logs -f turnserver
+#
+# 3. Run connectivity test:
+#      npx tsx scripts/test-turn-server.ts
+#
+# 4. Test in browser (Trickle ICE tool):
+#      https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/
+#      - Add: turn:localhost:3478
+#      - Username: nextalk
+#      - Password: nextturn2024
+#      - Look for "relay" candidates
+#
+# 5. Test with real WebRTC connection:
+#      - Join a voice/video channel
+#      - Check browser console for "relay" ICE candidates
+#      - Verify media connection works even with strict NAT
 #
 # ============================================================

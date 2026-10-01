@@ -6,6 +6,7 @@ import Redis from "ioredis";
 import { PrismaClient } from "@prisma/client";
 import { latencyMiddleware } from "./latency-tracker";
 import { getAllMetrics, formatPrometheusMetrics } from "./metrics-service";
+import { sfuServer } from "./sfu-server";
 
 const app = express();
 const server = createServer(app);
@@ -278,6 +279,331 @@ io.on("connection", (socket) => {
   });
   // ----------------------------------------
 
+  // === SFU (mediasoup) Signaling Events ===
+  
+  /**
+   * Join an SFU room (create room and add participant)
+   * Returns existing participants with their active producers
+   */
+  socket.on("sfu:join", async (data: { roomId: string }, callback: (response: any) => void) => {
+    try {
+      // Create room if it doesn't exist
+      const room = await sfuServer.createRoom(data.roomId);
+      
+      // Add participant to room
+      const participant = sfuServer.addParticipant(data.roomId, userId, socket.id, username);
+      
+      if (!participant) {
+        callback({ error: "Failed to add participant to room" });
+        return;
+      }
+
+      // Get router RTP capabilities for the client
+      const rtpCapabilities = sfuServer.getRouterRtpCapabilities(data.roomId);
+      
+      // Join Socket.io room for signaling
+      socket.join(`sfu:${data.roomId}`);
+      
+      // Notify other participants that someone joined
+      socket.to(`sfu:${data.roomId}`).emit("sfu:participant-joined", {
+        userId,
+        username,
+        socketId: socket.id,
+      });
+
+      // Get list of existing participants with their producers
+      // This allows the new joiner to create consumers for existing media
+      const existingParticipants = sfuServer.getRoomParticipants(data.roomId)
+        .filter(p => p.id !== userId)
+        .map(p => {
+          // Get producer details including kind (audio/video)
+          const producers = Array.from(p.producers.entries()).map(([id, producer]) => ({
+            id,
+            kind: producer.kind,
+          }));
+          
+          return {
+            userId: p.id,
+            username: p.username,
+            socketId: p.socketId,
+            producers,
+          };
+        });
+
+      callback({
+        rtpCapabilities,
+        participants: existingParticipants,
+      });
+
+      console.log(`  🎬 ${username} joined SFU room ${data.roomId} (${existingParticipants.length} existing participants)`);
+    } catch (error: any) {
+      console.error("sfu:join error:", error);
+      callback({ error: error.message });
+    }
+  });
+
+  /**
+   * Leave an SFU room
+   */
+  socket.on("sfu:leave", async (data: { roomId: string }) => {
+    try {
+      await sfuServer.removeParticipant(data.roomId, userId);
+      socket.leave(`sfu:${data.roomId}`);
+      
+      // Notify others that participant left
+      socket.to(`sfu:${data.roomId}`).emit("sfu:participant-left", {
+        userId,
+        socketId: socket.id,
+      });
+
+      console.log(`  🎬 ${username} left SFU room ${data.roomId}`);
+    } catch (error: any) {
+      console.error("sfu:leave error:", error);
+    }
+  });
+
+  /**
+   * Create a WebRTC transport (send or receive)
+   */
+  socket.on("sfu:createTransport", async (
+    data: { roomId: string; direction: "send" | "recv" },
+    callback: (response: any) => void
+  ) => {
+    try {
+      const transportParams = await sfuServer.createWebRtcTransport(
+        data.roomId,
+        userId,
+        data.direction
+      );
+      
+      callback(transportParams);
+      console.log(`  🔌 ${username} created ${data.direction} transport in room ${data.roomId}`);
+    } catch (error: any) {
+      console.error("sfu:createTransport error:", error);
+      callback({ error: error.message });
+    }
+  });
+
+  /**
+   * Connect a WebRTC transport
+   */
+  socket.on("sfu:connectTransport", async (
+    data: { roomId: string; transportId: string; dtlsParameters: any },
+    callback: (response: any) => void
+  ) => {
+    try {
+      await sfuServer.connectWebRtcTransport(
+        data.roomId,
+        userId,
+        data.transportId,
+        data.dtlsParameters
+      );
+      
+      callback({ success: true });
+      console.log(`  🔗 ${username} connected transport ${data.transportId}`);
+    } catch (error: any) {
+      console.error("sfu:connectTransport error:", error);
+      callback({ error: error.message });
+    }
+  });
+
+  /**
+   * Produce media (start sending audio/video)
+   * Task 19.1: Handle produce event for audio/video
+   */
+  socket.on("sfu:produce", async (
+    data: { 
+      roomId: string; 
+      transportId: string; 
+      kind: "audio" | "video"; 
+      rtpParameters: any;
+      appData?: any;
+    },
+    callback: (response: any) => void
+  ) => {
+    try {
+      // Validate room and participant exist
+      const participant = sfuServer.getParticipant(data.roomId, userId);
+      if (!participant) {
+        throw new Error(`Participant ${userId} not found in room ${data.roomId}`);
+      }
+
+      // Create producer for client media track
+      const producerId = await sfuServer.produce(
+        data.roomId,
+        userId,
+        data.transportId,
+        data.kind,
+        data.rtpParameters
+      );
+      
+      // Notify other participants that new producer is available
+      // This allows them to create consumers for this producer
+      socket.to(`sfu:${data.roomId}`).emit("sfu:new-producer", {
+        producerId,
+        userId,
+        username,
+        socketId: socket.id,
+        kind: data.kind,
+        appData: data.appData,
+      });
+
+      callback({ 
+        producerId,
+        kind: data.kind,
+      });
+      
+      console.log(`  🎤 ${username} started producing ${data.kind} (producer: ${producerId}) in room ${data.roomId}`);
+    } catch (error: any) {
+      console.error("sfu:produce error:", error);
+      callback({ error: error.message });
+    }
+  });
+
+  /**
+   * Consume media (start receiving audio/video from another participant)
+   * Task 19.2: Handle consume request and configure simulcast layers
+   */
+  socket.on("sfu:consume", async (
+    data: { 
+      roomId: string; 
+      producerId: string; 
+      rtpCapabilities: any;
+    },
+    callback: (response: any) => void
+  ) => {
+    try {
+      // Validate participant exists
+      const participant = sfuServer.getParticipant(data.roomId, userId);
+      if (!participant) {
+        throw new Error(`Participant ${userId} not found in room ${data.roomId}`);
+      }
+
+      if (!participant.recvTransport) {
+        throw new Error(`Receive transport not created for ${userId}`);
+      }
+
+      // Create consumer for remote producer
+      const consumerParams = await sfuServer.consume(
+        data.roomId,
+        userId,
+        data.producerId,
+        data.rtpCapabilities
+      );
+      
+      callback(consumerParams);
+      console.log(`  🔊 ${username} consuming ${consumerParams.kind} producer ${data.producerId}`);
+    } catch (error: any) {
+      console.error("sfu:consume error:", error);
+      callback({ error: error.message });
+    }
+  });
+
+  /**
+   * Close a producer (stop sending audio/video)
+   */
+  socket.on("sfu:closeProducer", (data: { roomId: string; producerId: string }) => {
+    try {
+      sfuServer.closeProducer(data.roomId, userId, data.producerId);
+      
+      // Notify other participants
+      socket.to(`sfu:${data.roomId}`).emit("sfu:producer-closed", {
+        producerId: data.producerId,
+        userId,
+      });
+
+      console.log(`  ❌ ${username} closed producer ${data.producerId}`);
+    } catch (error: any) {
+      console.error("sfu:closeProducer error:", error);
+    }
+  });
+
+  /**
+   * Close a consumer (stop receiving audio/video)
+   */
+  socket.on("sfu:closeConsumer", (data: { roomId: string; consumerId: string }) => {
+    try {
+      sfuServer.closeConsumer(data.roomId, userId, data.consumerId);
+      console.log(`  ❌ ${username} closed consumer ${data.consumerId}`);
+    } catch (error: any) {
+      console.error("sfu:closeConsumer error:", error);
+    }
+  });
+
+  /**
+   * Set preferred layers for a video consumer (simulcast quality adjustment)
+   */
+  socket.on("sfu:setConsumerLayers", async (
+    data: { roomId: string; consumerId: string; spatialLayer: number; temporalLayer?: number },
+    callback?: (response: any) => void
+  ) => {
+    try {
+      await sfuServer.setConsumerPreferredLayers(
+        data.roomId,
+        userId,
+        data.consumerId,
+        data.spatialLayer,
+        data.temporalLayer
+      );
+      
+      if (callback) {
+        callback({ success: true });
+      }
+      console.log(`  🎚️  ${username} set consumer ${data.consumerId} layers: ${data.spatialLayer}/${data.temporalLayer || 0}`);
+    } catch (error: any) {
+      console.error("sfu:setConsumerLayers error:", error);
+      if (callback) {
+        callback({ error: error.message });
+      }
+    }
+  });
+
+  /**
+   * Pause a consumer (stop receiving temporarily)
+   */
+  socket.on("sfu:pauseConsumer", async (
+    data: { roomId: string; consumerId: string },
+    callback?: (response: any) => void
+  ) => {
+    try {
+      await sfuServer.pauseConsumer(data.roomId, userId, data.consumerId);
+      
+      if (callback) {
+        callback({ success: true });
+      }
+      console.log(`  ⏸️  ${username} paused consumer ${data.consumerId}`);
+    } catch (error: any) {
+      console.error("sfu:pauseConsumer error:", error);
+      if (callback) {
+        callback({ error: error.message });
+      }
+    }
+  });
+
+  /**
+   * Resume a consumer (start receiving again)
+   */
+  socket.on("sfu:resumeConsumer", async (
+    data: { roomId: string; consumerId: string },
+    callback?: (response: any) => void
+  ) => {
+    try {
+      await sfuServer.resumeConsumer(data.roomId, userId, data.consumerId);
+      
+      if (callback) {
+        callback({ success: true });
+      }
+      console.log(`  ▶️  ${username} resumed consumer ${data.consumerId}`);
+    } catch (error: any) {
+      console.error("sfu:resumeConsumer error:", error);
+      if (callback) {
+        callback({ error: error.message });
+      }
+    }
+  });
+
+  // ========================================
+
 
   // Send message — validate sender is in the channel room
   socket.on("message:send", (data: {
@@ -439,7 +765,7 @@ io.on("connection", (socket) => {
   });
 
   // Disconnect handler
-  socket.on("disconnect", () => {
+  socket.on("disconnect", async () => {
     console.log(`🔴 ${username} disconnected`);
     onlineUsers.delete(userId);
     socketChannels.delete(socket.id);
@@ -453,16 +779,36 @@ io.on("connection", (socket) => {
       io.to(`voice:${voiceChannelId}`).emit("voice:user-left", { userId, socketId: socket.id });
       socketVoiceRooms.delete(socket.id);
     }
+
+    // Handle sudden disconnect from SFU rooms
+    // Find all SFU rooms this user is in and clean up
+    for (const room of socket.rooms) {
+      if (room.startsWith("sfu:")) {
+        const roomId = room.substring(4); // Remove "sfu:" prefix
+        try {
+          await sfuServer.removeParticipant(roomId, userId);
+          socket.to(`sfu:${roomId}`).emit("sfu:participant-left", {
+            userId,
+            socketId: socket.id,
+          });
+          console.log(`  🎬 ${username} auto-removed from SFU room ${roomId} on disconnect`);
+        } catch (error: any) {
+          console.error(`Error cleaning up SFU room ${roomId}:`, error);
+        }
+      }
+    }
   });
 });
 
 // Health check
 app.get("/health", (_req, res) => {
+  const sfuStats = sfuServer.getStats();
   res.json({
     status: "ok",
     connections: io.engine.clientsCount,
     redis: redisConnected ? "connected" : "disconnected",
-    mode: redisConnected ? "multi-instance" : "single-instance"
+    mode: redisConnected ? "multi-instance" : "single-instance",
+    sfu: sfuStats,
   });
 });
 

@@ -134,6 +134,10 @@ export async function POST(req: Request) {
   // Invalidate cache for this channel since we added a new message
   const { invalidateChannelCache } = await import("@/lib/message-cache");
   await invalidateChannelCache(channelId);
+  
+  // Invalidate AI response cache for this channel
+  const { invalidateChannelAICache } = await import("@/lib/ai-cache");
+  await invalidateChannelAICache(channelId);
 
   return NextResponse.json(message, { status: 201 });
 }

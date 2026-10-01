@@ -7,8 +7,100 @@
 
 import { PrismaClient } from "@prisma/client";
 import { embedText } from "./embeddings";
+import { redis } from "./redis";
 
 const prisma = new PrismaClient();
+
+/**
+ * Query Embedding Cache
+ * 
+ * Caches query embeddings for 1 hour to reduce API calls
+ * Task 30.1: Implement query embedding cache
+ * Requirements: 4.7, 4.8
+ */
+
+const QUERY_EMBEDDING_CACHE_PREFIX = "nextalk:query-embedding:";
+const QUERY_EMBEDDING_TTL = 60 * 60; // 1 hour in seconds
+
+/**
+ * Normalize query for cache key generation
+ * - Convert to lowercase
+ * - Trim whitespace
+ * - Collapse multiple spaces to single space
+ */
+function normalizeQuery(query: string): string {
+  return query.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Generate cache key for query embedding
+ */
+function getCacheKey(query: string): string {
+  const normalized = normalizeQuery(query);
+  return `${QUERY_EMBEDDING_CACHE_PREFIX}${normalized}`;
+}
+
+/**
+ * Get cached query embedding
+ * Returns null if not found or cache error
+ */
+async function getCachedQueryEmbedding(
+  query: string
+): Promise<number[] | null> {
+  try {
+    const cacheKey = getCacheKey(query);
+    const cached = await redis.get(cacheKey);
+
+    if (!cached) {
+      return null;
+    }
+
+    const embedding = JSON.parse(cached);
+    console.log(`✅ Query embedding cache HIT: "${query.substring(0, 50)}..."`);
+    return embedding;
+  } catch (error: any) {
+    console.error("Query embedding cache get error:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Cache query embedding
+ */
+async function cacheQueryEmbedding(
+  query: string,
+  embedding: number[]
+): Promise<void> {
+  try {
+    const cacheKey = getCacheKey(query);
+    await redis.setex(cacheKey, QUERY_EMBEDDING_TTL, JSON.stringify(embedding));
+    console.log(`💾 Query embedding cached: "${query.substring(0, 50)}..."`);
+  } catch (error: any) {
+    console.error("Query embedding cache set error:", error.message);
+    // Don't throw - caching is not critical
+  }
+}
+
+/**
+ * Get query embedding with caching
+ * Checks cache first, generates and caches on miss
+ */
+async function getQueryEmbedding(query: string): Promise<number[]> {
+  // Try cache first
+  const cached = await getCachedQueryEmbedding(query);
+  if (cached) {
+    return cached;
+  }
+
+  // Cache miss - generate embedding
+  console.log(`❌ Query embedding cache MISS: "${query.substring(0, 50)}..."`);
+  const { embedding } = await embedText(query);
+
+  // Cache for future requests
+  await cacheQueryEmbedding(query, embedding);
+
+  return embedding;
+}
 
 export interface SemanticSearchParams {
   query: string;
@@ -47,8 +139,8 @@ export async function semanticSearch(
   } = params;
 
   try {
-    // Generate embedding for the query
-    const { embedding: queryEmbedding } = await embedText(query);
+    // Generate embedding for the query (with caching)
+    const queryEmbedding = await getQueryEmbedding(query);
 
     // Build WHERE clause
     const channelFilter = channelId ? `AND m."channelId" = '${channelId}'` : "";
@@ -241,6 +333,7 @@ export async function hybridSearch(
 ): Promise<SearchResult[]> {
   try {
     // Run both searches in parallel
+    // Note: semantic search will use cached query embedding
     const [semanticResults, keywordResults] = await Promise.all([
       semanticSearch({ query, channelId, limit: limit * 2 }),
       keywordSearch(query, channelId, limit * 2),

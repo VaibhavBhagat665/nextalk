@@ -21,11 +21,27 @@ const mockPrismaInstance = {
   },
 };
 
+// Mock Redis before importing
+const mockRedisGet = vi.fn();
+const mockRedisSetex = vi.fn();
+
+const mockRedis = {
+  get: mockRedisGet,
+  setex: mockRedisSetex,
+};
+
 vi.mock("@prisma/client", () => ({
   PrismaClient: class {
     $queryRawUnsafe = mockPrismaInstance.$queryRawUnsafe;
     message = mockPrismaInstance.message;
   },
+}));
+
+// Mock Redis
+vi.mock("./redis", () => ({
+  redis: mockRedis,
+  getRedisPub: vi.fn(() => mockRedis),
+  getRedisSub: vi.fn(() => mockRedis),
 }));
 
 // Mock embeddings
@@ -48,6 +64,9 @@ const { hybridSearch } = await import("./semantic-search");
 describe("Task 28.2: Reciprocal Rank Fusion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset redis mocks to return cache miss by default
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisSetex.mockResolvedValue("OK");
   });
 
   it("should combine semantic and keyword results using RRF algorithm", async () => {

@@ -17,7 +17,13 @@
     "benchmark:quick": "k6 run --vus 100 --duration 30s benchmarks/load-test.js",
     "db:profile": "tsx benchmarks/profile-queries.ts",
     "db:seed": "tsx prisma/seed-messages.ts",
-    "test:cross-instance": "tsx server/test-cross-instance.ts"
+    "db:setup-pgvector": "tsx scripts/setup-pgvector.ts",
+    "backfill:embeddings": "tsx scripts/backfill-embeddings.ts",
+    "test:backfill-performance": "tsx scripts/test-backfill-performance.ts",
+    "test:cross-instance": "tsx tests/cross-instance-test.ts",
+    "test:single-instance": "tsx tests/single-instance-test.ts",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.12.0",
@@ -27,7 +33,6 @@
     "@tailwindcss/postcss": "^4",
     "@tanstack/react-query": "^5.75.0",
     "@types/express": "^5.0.0",
-    "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-window": "^1.8.8",
@@ -40,6 +45,7 @@
     "ioredis": "^5.7.0",
     "lucide-react": "^0.510.0",
     "mediasoup": "^3.27.1",
+    "mediasoup-client": "^3.24.1",
     "next": "16.2.6",
     "next-themes": "^0.4.6",
     "qrcode.react": "^4.2.0",
@@ -55,10 +61,13 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.3",
     "concurrently": "^9.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "fast-check": "^4.10.2",
     "prisma": "^6.9.0",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.2"
   }
 }
