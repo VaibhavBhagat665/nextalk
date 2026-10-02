@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@nextalk/crypto": ["./packages/crypto/src"]
     }
   },
   "include": [

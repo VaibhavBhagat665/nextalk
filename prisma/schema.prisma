@@ -131,6 +131,7 @@ model Message {
   isSystem   Boolean  @default(false)
   encrypted  Boolean  @default(false)
   iv         String?  // Initialization vector for E2E encryption
+  keyVersion Int?     // Key version for E2E encryption with rotation
   channelId  String
   userId     String
   dmToUserId String?
@@ -257,4 +258,18 @@ model VoiceState {
   @@unique([userId, channelId])
   @@index([channelId])
   @@index([userId])
+}
+
+model DMSessionKey {
+  id             String   @id @default(cuid())
+  conversationId String   // Sorted userId pair: "user1_user2"
+  keyVersion     Int      @default(1)
+  salt           String   // Base64-encoded salt for HKDF
+  messageCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([conversationId, keyVersion])
+  @@index([conversationId])
+  @@index([expiresAt]) // For cleanup job
 }

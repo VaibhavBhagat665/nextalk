@@ -2,6 +2,9 @@
   "name": "nextalk",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "concurrently \"next dev --turbopack\" \"tsx --watch server/socket-server.ts\"",
     "dev:next": "next dev --turbopack",
@@ -26,6 +29,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@nextalk/crypto": "workspace:*",
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.6.3",
     "@clerk/nextjs": "^6.12.0",
     "@clerk/themes": "^2.4.57",
     "@prisma/client": "^6.9.0",
