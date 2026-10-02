@@ -5,16 +5,11 @@ import { useSocket } from "@/hooks/useSocket";
 import MessageList from "@/components/chat/MessageList";
 import MessageInput from "@/components/chat/MessageInput";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import { User, Loader2, Lock, Phone, Video } from "lucide-react";
+import { User, Loader2, Lock, Phone, Video, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useParams } from "next/navigation";
-import {
-  getOrCreateKeyPair,
-  exportPublicKey,
-  importPublicKey,
-  deriveSharedKey,
-  encryptMessage,
-  decryptMessage,
-} from "@/lib/crypto";
+import { encryptDM, decryptDM } from "@/lib/dm-encryption-manager";
+import { generateX25519KeyPair } from "@nextalk/crypto";
+import KeyVerificationModal from "@/components/modals/KeyVerificationModal";
 
 interface DMUser {
   id: string;
@@ -31,11 +26,37 @@ export default function DMPage() {
   const [channelId, setChannelId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [initializing, setInitializing] = useState(true);
-  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  const [myPrivateKey, setMyPrivateKey] = useState<Uint8Array | null>(null);
+  const [myPublicKey, setMyPublicKey] = useState<string>("");
+  const [theirPublicKey, setTheirPublicKey] = useState<Uint8Array | null>(null);
+  const [theirPublicKeyBase64, setTheirPublicKeyBase64] = useState<string>("");
+  const [isEncrypted, setIsEncrypted] = useState(false);
   const [cryptoError, setCryptoError] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [loadingVerification, setLoadingVerification] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [targetUsername, setTargetUsername] = useState("");
 
   const { messages, setMessages, typingUsers, isConnected, sendMessage, startTyping, reactToMessage } =
     useSocket(channelId);
+
+  // Check verification status
+  useEffect(() => {
+    if (!targetUserId) return;
+    
+    setLoadingVerification(true);
+    fetch(`/api/verification?verifiedUserId=${targetUserId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setIsVerified(data.verified || false);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch verification status:", error);
+      })
+      .finally(() => {
+        setLoadingVerification(false);
+      });
+  }, [targetUserId]);
 
   // Initialize DM, Keys, and Channel
   useEffect(() => {
@@ -45,26 +66,29 @@ export default function DMPage() {
       setCryptoError("");
 
       try {
-        // 1. Init local keys
-        const localKeys = await getOrCreateKeyPair(user.id);
+        // 1. Initialize X25519 key pair for current user
+        const keyPair = await generateX25519KeyPair();
+        setMyPrivateKey(keyPair.privateKey);
         
-        // Ensure our public key is registered with the server
-        const exportedPublic = await exportPublicKey(localKeys.publicKey);
+        // 2. Store my public key on the server
+        const myPublicKeyBase64 = Buffer.from(keyPair.publicKey).toString('base64');
+        setMyPublicKey(myPublicKeyBase64);
         await fetch("/api/settings", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ publicKey: JSON.stringify(exportedPublic) })
+          body: JSON.stringify({ x25519PublicKey: myPublicKeyBase64 })
         });
 
-        // 2. Fetch target user's public key
+        // 3. Fetch target user's public key and username
         const targetRes = await fetch(`/api/users/${targetUserId}/key`);
         if (targetRes.ok) {
           const targetData = await targetRes.json();
-          if (targetData.publicKey) {
-            const targetPublicKey = await importPublicKey(targetData.publicKey);
-            // 3. Derive shared key
-            const derived = await deriveSharedKey(localKeys.privateKey, targetPublicKey);
-            setSharedKey(derived);
+          setTargetUsername(targetData.username || "User");
+          if (targetData.x25519PublicKey) {
+            const theirKey = Buffer.from(targetData.x25519PublicKey, 'base64');
+            setTheirPublicKey(theirKey);
+            setTheirPublicKeyBase64(targetData.x25519PublicKey);
+            setIsEncrypted(true);
           }
         }
 
@@ -96,7 +120,7 @@ export default function DMPage() {
 
   // Fetch and decrypt message history
   useEffect(() => {
-    if (!channelId) return;
+    if (!channelId || !myPrivateKey || !user?.id) return;
 
     setLoadingHistory(true);
     fetch(`/api/messages?channelId=${channelId}&limit=50`)
@@ -106,14 +130,29 @@ export default function DMPage() {
         const decryptedMessages = await Promise.all(
           data.messages.map(async (m: any) => {
             let content = m.content;
-            if (m.encrypted && m.iv && sharedKey) {
+            
+            // If message is encrypted and we have the keys, decrypt it
+            if (m.encrypted && m.iv && m.salt && m.keyVersion && myPrivateKey && theirPublicKey) {
               try {
-                content = await decryptMessage(m.content, m.iv, sharedKey);
+                const encryptedMessage = {
+                  ciphertext: m.content,
+                  iv: m.iv,
+                  salt: m.salt,
+                  keyVersion: m.keyVersion,
+                };
+                content = await decryptDM(
+                  encryptedMessage,
+                  user.id,
+                  targetUserId,
+                  myPrivateKey,
+                  theirPublicKey
+                );
               } catch (err) {
                 console.error("Failed to decrypt message:", err);
-                content = "[Encrypted Message]";
+                content = "[Unable to decrypt]";
               }
             }
+            
             return {
               id: m.id,
               content,
@@ -125,6 +164,7 @@ export default function DMPage() {
               fileName: m.fileName,
               fileType: m.fileType,
               createdAt: m.createdAt,
+              encrypted: m.encrypted || false,
               user: m.user,
               reactions: m.reactions?.map((r: any) => ({
                 emoji: r.emoji,
@@ -139,42 +179,43 @@ export default function DMPage() {
       })
       .catch(console.error)
       .finally(() => setLoadingHistory(false));
-  }, [channelId, sharedKey, setMessages]);
-
-  // Handle incoming live messages (decrypt them)
-  useEffect(() => {
-    if (!sharedKey || messages.length === 0) return;
-    
-    // We only need to check the last message added to see if it needs decryption
-    // In a real app we'd intercept the socket event directly, but for now we'll 
-    // re-map the state to decrypt newly added encrypted messages.
-    const lastMsg = messages[messages.length - 1];
-    
-    // A live socket message won't have the 'encrypted' flag easily accessible unless we modified the socket payload,
-    // so we assume if it's base64 looking and we have an IV property in the extended socket payload (which we'd need to add)
-    // For this prototype, we'll just encrypt on send and assume the DB handles the rest for history.
-    // If the socket payload was raw ciphertext, we'd decrypt it here.
-  }, [messages, sharedKey]);
+  }, [channelId, myPrivateKey, theirPublicKey, user?.id, targetUserId, setMessages]);
 
   const handleSend = async (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
-    if (!channelId) return;
+    if (!channelId || !user?.id) return;
 
     let finalContent = content;
     let isEncrypted = false;
-    let currentIv: string | undefined;
+    let encryptedData: { iv: string; salt: string; keyVersion: number } | undefined;
 
-    // 1. Encrypt message locally if we have a shared key
-    if (sharedKey) {
-      const { ciphertext, iv } = await encryptMessage(content, sharedKey);
-      finalContent = ciphertext;
-      isEncrypted = true;
-      currentIv = iv;
+    // 1. Encrypt message if we have the necessary keys
+    if (myPrivateKey && theirPublicKey && isEncrypted) {
+      try {
+        const encrypted = await encryptDM(
+          content,
+          user.id,
+          targetUserId,
+          myPrivateKey,
+          theirPublicKey
+        );
+        finalContent = encrypted.ciphertext;
+        isEncrypted = true;
+        encryptedData = {
+          iv: encrypted.iv,
+          salt: encrypted.salt,
+          keyVersion: encrypted.keyVersion,
+        };
+      } catch (err) {
+        console.error("Failed to encrypt message:", err);
+        // Fall back to sending unencrypted
+        isEncrypted = false;
+      }
     }
 
     // 2. Send via socket (Optimistically show plaintext locally)
     sendMessage(content, fileUrl, fileName, fileType); 
 
-    // 3. Persist via REST
+    // 3. Persist via REST with encryption metadata
     await fetch("/api/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -185,10 +226,17 @@ export default function DMPage() {
         fileName, 
         fileType,
         encrypted: isEncrypted,
-        iv: currentIv || null,
+        iv: encryptedData?.iv || null,
+        salt: encryptedData?.salt || null,
+        keyVersion: encryptedData?.keyVersion || null,
         dmToUserId: targetUserId
       }),
     });
+  };
+
+  const handleVerification = (verified: boolean) => {
+    setIsVerified(verified);
+    setShowVerificationModal(false);
   };
 
 
@@ -204,13 +252,22 @@ export default function DMPage() {
           <div>
             <h1 className="header-name">Direct Message</h1>
             <div className="header-badges">
-              {sharedKey ? (
-                <span className="e2e-badge">
-                  <Lock size={10} /> End-to-End Encrypted
+              {isEncrypted ? (
+                <button 
+                  className="e2e-badge e2e-badge--active e2e-badge--clickable"
+                  onClick={() => setShowVerificationModal(true)}
+                  title="Click to verify encryption"
+                >
+                  {isVerified ? <ShieldCheck size={10} /> : <Shield size={10} />}
+                  {isVerified ? "Verified" : "End-to-End Encrypted"}
+                </button>
+              ) : cryptoError ? (
+                <span className="e2e-badge e2e-badge--error">
+                  <ShieldAlert size={10} /> Encryption Failed
                 </span>
               ) : (
-                <span className="e2e-badge" style={{ color: "var(--text-muted)" }}>
-                  Standard Connection
+                <span className="e2e-badge e2e-badge--inactive">
+                  <Lock size={10} /> Connecting...
                 </span>
               )}
             </div>
@@ -248,7 +305,26 @@ export default function DMPage() {
 
       {/* Input */}
       <TypingIndicator typingUsers={typingUsers} />
-      <MessageInput onSend={handleSend} onTyping={startTyping} disabled={!isConnected || !channelId} />
+      <MessageInput 
+        onSend={handleSend} 
+        onTyping={startTyping} 
+        disabled={!isConnected || !channelId} 
+        encrypted={isEncrypted && !!myPrivateKey && !!theirPublicKey}
+      />
+
+      {/* Key Verification Modal */}
+      {showVerificationModal && myPublicKey && theirPublicKeyBase64 && user && (
+        <KeyVerificationModal
+          userId={targetUserId}
+          username={targetUsername}
+          myUserId={user.id}
+          myPublicKey={myPublicKey}
+          theirPublicKey={theirPublicKeyBase64}
+          isVerified={isVerified}
+          onClose={() => setShowVerificationModal(false)}
+          onVerify={handleVerification}
+        />
+      )}
 
       <style jsx>{`
         .dm-page { display:flex; flex-direction:column; height:100%; position:relative; background:var(--bg-primary); }
@@ -276,7 +352,46 @@ export default function DMPage() {
         .e2e-badge {
           display:flex; align-items:center; gap:4px;
           font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;
-          color:var(--accent-emerald);
+        }
+        
+        .e2e-badge--clickable {
+          background: transparent;
+          border: 1px solid var(--accent-emerald);
+          padding: 4px 8px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        
+        .e2e-badge--clickable:hover {
+          background: var(--accent-emerald);
+          color: white;
+        }
+        
+        .e2e-badge--active {
+          color: var(--accent-emerald);
+        }
+        
+        .e2e-badge--inactive {
+          color: var(--text-muted);
+        }
+        
+        .e2e-badge--error {
+          color: var(--accent-rose);
+        }
+        
+        .verified-check {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 14px;
+          height: 14px;
+          background: var(--accent-emerald);
+          color: white;
+          border-radius: 50%;
+          font-size: 9px;
+          font-weight: 700;
+          margin-left: 4px;
         }
 
         .header-actions { display:flex; align-items:center; gap:12px; }

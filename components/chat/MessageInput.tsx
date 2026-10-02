@@ -19,6 +19,7 @@ export default function MessageInput({
   onSend,
   onTyping,
   disabled,
+  encrypted,
 }: {
   onSend: (
     content: string,
@@ -28,6 +29,7 @@ export default function MessageInput({
   ) => void;
   onTyping: () => void;
   disabled?: boolean;
+  encrypted?: boolean;
 }) {
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -298,6 +300,13 @@ export default function MessageInput({
             <Mic size={17} />
           </button>
 
+          {/* Encryption indicator */}
+          {encrypted && (
+            <div className="encryption-indicator" data-tooltip="End-to-End Encrypted" title="Messages are end-to-end encrypted">
+              🔒
+            </div>
+          )}
+
           {/* Gold Send Button */}
           <button
             type="submit"
@@ -461,6 +470,24 @@ export default function MessageInput({
         .send-button--active:hover {
           transform: scale(1.1);
           box-shadow: 0 0 24px rgba(232, 184, 75, 0.35);
+        }
+
+        .encryption-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 6px 8px;
+          color: var(--accent-emerald);
+          font-size: 14px;
+          background: rgba(16, 185, 129, 0.08);
+          border-radius: 8px;
+          cursor: help;
+          transition: all 0.2s ease;
+        }
+
+        .encryption-indicator:hover {
+          background: rgba(16, 185, 129, 0.15);
+          transform: scale(1.05);
         }
 
         @media (max-width: 768px) {

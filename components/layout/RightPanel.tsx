@@ -24,9 +24,14 @@ interface ChannelInfo {
   messageCount?: number;
 }
 
+interface GroupedMembers {
+  role: string;
+  members: { id: string; username: string; imageUrl: string | null; role: string }[];
+}
+
 /**
  * RightPanel — Column 4 (320px, collapsible).
- * Tabbed interface: Profile, Members, AI.
+ * Tabbed interface: Members (grouped by role), Threads, AI.
  */
 export default function RightPanel({
   channel,
@@ -38,16 +43,45 @@ export default function RightPanel({
   onClose: () => void;
 }) {
   const { user } = useUser();
-  const [activeTab, setActiveTab] = useState<"profile" | "members" | "ai">("profile");
+  const [activeTab, setActiveTab] = useState<"members" | "threads" | "ai">("members");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const tabs = [
-    { id: "profile" as const, label: "Profile", icon: UserIcon },
     { id: "members" as const, label: "Members", icon: Users },
+    { id: "threads" as const, label: "Threads", icon: UserIcon },
     { id: "ai" as const, label: "AI", icon: Sparkles },
   ];
+
+  // Group members by role
+  const groupMembersByRole = (members: typeof channel.members): GroupedMembers[] => {
+    if (!members) return [];
+
+    const grouped = members.reduce((acc, member) => {
+      const role = member.role || "member";
+      if (!acc[role]) {
+        acc[role] = [];
+      }
+      acc[role].push(member);
+      return acc;
+    }, {} as Record<string, typeof members>);
+
+    // Sort role groups: admin first, then other roles alphabetically
+    const roleOrder = ["admin", "moderator", "member"];
+    return Object.entries(grouped)
+      .sort(([a], [b]) => {
+        const aIndex = roleOrder.indexOf(a);
+        const bIndex = roleOrder.indexOf(b);
+        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+        if (aIndex !== -1) return -1;
+        if (bIndex !== -1) return 1;
+        return a.localeCompare(b);
+      })
+      .map(([role, members]) => ({ role, members }));
+  };
+
+  const groupedMembers = groupMembersByRole(channel?.members);
 
   const handleMemberClick = (memberId: string) => {
     // Don't open profile for yourself
@@ -147,42 +181,55 @@ export default function RightPanel({
                 <Users size={13} />
                 Channel Members — {channel?.members?.length || 0}
               </h4>
-              <div className="member-list">
-                {channel?.members?.map((member) => (
-                  <div
-                    key={member.id}
-                    className="member-item"
-                    id={`member-${member.id}`}
-                    onClick={() => handleMemberClick(member.id)}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div className="member-avatar-wrap">
-                      {member.imageUrl ? (
-                        <Image
-                          src={member.imageUrl}
-                          alt={member.username}
-                          width={32}
-                          height={32}
-                          className="member-avatar-img"
-                        />
-                      ) : (
-                        <div className="member-avatar-fallback">
-                          {getInitials(member.username)}
-                        </div>
-                      )}
+              {groupedMembers.length > 0 ? (
+                <div className="members-by-role">
+                  {groupedMembers.map((group) => (
+                    <div key={group.role} className="role-group">
+                      <div className="role-group-header">
+                        <span className="role-group-name">
+                          {group.role.toUpperCase()} — {group.members.length}
+                        </span>
+                      </div>
+                      <div className="member-list">
+                        {group.members.map((member) => (
+                          <div
+                            key={member.id}
+                            className="member-item"
+                            id={`member-${member.id}`}
+                            onClick={() => handleMemberClick(member.id)}
+                            role="button"
+                            tabIndex={0}
+                          >
+                            <div className="member-avatar-wrap">
+                              {member.imageUrl ? (
+                                <Image
+                                  src={member.imageUrl}
+                                  alt={member.username}
+                                  width={32}
+                                  height={32}
+                                  className="member-avatar-img"
+                                />
+                              ) : (
+                                <div className="member-avatar-fallback">
+                                  {getInitials(member.username)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="member-info">
+                              <span className="member-name">{member.username}</span>
+                              {member.role === "admin" && (
+                                <span className="member-role-tag">Admin</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="member-info">
-                      <span className="member-name">{member.username}</span>
-                      {member.role === "admin" && (
-                        <span className="member-role-tag">Admin</span>
-                      )}
-                    </div>
-                  </div>
-                )) || (
-                  <p className="empty-hint">No members info available</p>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-hint">No members info available</p>
+              )}
             </div>
           </div>
         )}
@@ -416,6 +463,30 @@ export default function RightPanel({
         }
 
         /* Members */
+        .members-by-role {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .role-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .role-group-header {
+          padding: 0 4px;
+        }
+
+        .role-group-name {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: var(--text-muted);
+        }
+
         .member-list {
           display: flex;
           flex-direction: column;

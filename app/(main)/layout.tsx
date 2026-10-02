@@ -112,6 +112,24 @@ export default async function MainLayout({
           dmChannelMap.get(m.channelId).members.push(m.user);
         }
         
+        // Fetch verification statuses for all DM users
+        const otherUserIds = new Set<string>();
+        for (const [, data] of dmChannelMap.entries()) {
+          const otherUser = data.members.find((u: any) => u.id !== user!.id);
+          if (otherUser) {
+            otherUserIds.add(otherUser.id);
+          }
+        }
+        
+        const verifications = await prisma.keyVerification.findMany({
+          where: {
+            userId: user!.id,
+            verifiedUserId: { in: Array.from(otherUserIds) },
+          },
+        });
+        
+        const verificationMap = new Map(verifications.map((v: { verifiedUserId: string; verified: boolean }) => [v.verifiedUserId, v.verified]));
+        
         for (const [channelId, data] of dmChannelMap.entries()) {
           const otherUser = data.members.find((u: any) => u.id !== user!.id) || user;
           dmChannelsWithUsers.push({
@@ -121,6 +139,7 @@ export default async function MainLayout({
             isDM: true,
             targetUserId: otherUser.id,
             isOnline: false, // Optional: handle presence later
+            isVerified: verificationMap.get(otherUser.id) || false,
           });
         }
       }

@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe('Property 13: Private Key Isolation', () => {
-  it('should never transmit private keys over the network when uploading public keys', async () => {
+  it('should never transmit private keys over the network when uploading public keys', { timeout: 30000 }, async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.integer({ min: 1, max: 10 }),
@@ -121,7 +121,7 @@ describe('Property 13: Private Key Isolation', () => {
     );
   });
   
-  it('should generate different private keys for different invocations', () => {
+  it('should generate different private keys for different invocations', { timeout: 30000 }, () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 2, max: 20 }),

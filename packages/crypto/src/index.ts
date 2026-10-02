@@ -22,3 +22,4 @@ export * from './api-client.js';
 export * from './encryption.js';
 export * from './utils.js';
 export * from './session-key-manager.js';
+export * from './fingerprint.js';

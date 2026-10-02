@@ -20,6 +20,8 @@ interface Channel {
   voiceUsers?: { id: string; username: string; imageUrl: string | null; muted: boolean }[];
   targetUserId?: string;
   isOnline?: boolean;
+  unreadCount?: number;
+  mentionCount?: number;
 }
 
 export default function ChannelList({
@@ -76,6 +78,8 @@ export default function ChannelList({
           const Icon = isVoice ? Volume2 : getChannelIcon(channel.icon);
           const voiceUsers = channel.voiceUsers || [];
           const href = currentServerId ? `/channel/${channel.id}?server=${currentServerId}` : `/channel/${channel.id}`;
+          const unreadCount = channel.unreadCount || 0;
+          const mentionCount = channel.mentionCount || 0;
 
           return (
             <div key={channel.id} className="channel-item-wrap" onContextMenu={(e) => handleContextMenu(e, channel.id)}>
@@ -102,6 +106,17 @@ export default function ChannelList({
                     <span className="voice-count">{voiceUsers.length} connected</span>
                   )}
                 </div>
+                {/* Unread & Mention Badges */}
+                {!isActive && (
+                  <div className="channel-badges">
+                    {mentionCount > 0 && (
+                      <div className="mention-badge">{mentionCount > 99 ? "99+" : mentionCount}</div>
+                    )}
+                    {unreadCount > 0 && mentionCount === 0 && (
+                      <div className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</div>
+                    )}
+                  </div>
+                )}
                 {!isVoice && channel.lastMessage && (
                   <span className="channel-time">{formatRelativeTime(channel.lastMessage.createdAt)}</span>
                 )}
@@ -219,6 +234,39 @@ export default function ChannelList({
         .channel-name { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .channel-preview { display: block; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
         .voice-count { display: block; font-size: 11px; color: var(--accent-cyan); font-weight: 700; margin-top: 2px; }
+        .channel-badges {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-right: 4px;
+        }
+        .mention-badge {
+          min-width: 20px;
+          height: 20px;
+          padding: 0 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--accent-error, #EF4444);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+          animation: pulse 2s ease-in-out infinite;
+        }
+        .unread-badge {
+          min-width: 20px;
+          height: 20px;
+          padding: 0 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--text-muted);
+          color: var(--bg-secondary);
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+        }
         .channel-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; font-weight: 500; }
         .voice-users {
           display: flex; gap: 4px; padding: 4px 14px 6px 52px; flex-wrap: wrap;

@@ -11,15 +11,33 @@ export async function GET(
 
   const { userId } = await params;
 
-  // We are searching by internal ID, not clerk ID, for the target
-  const settings = await prisma.userSettings.findUnique({
-    where: { userId },
-    select: { publicKey: true }
+  // Fetch user and their settings
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      settings: {
+        select: { publicKey: true, x25519PublicKey: true }
+      }
+    }
   });
 
-  if (!settings || !settings.publicKey) {
-    return NextResponse.json({ error: "User has not set up E2E encryption yet" }, { status: 404 });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ publicKey: JSON.parse(settings.publicKey) });
+  const response: any = {
+    username: user.username,
+  };
+
+  // Include legacy public key if it exists
+  if (user.settings?.publicKey) {
+    response.publicKey = JSON.parse(user.settings.publicKey);
+  }
+
+  // Include X25519 public key if it exists
+  if (user.settings?.x25519PublicKey) {
+    response.x25519PublicKey = user.settings.x25519PublicKey;
+  }
+
+  return NextResponse.json(response);
 }

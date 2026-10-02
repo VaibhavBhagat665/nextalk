@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { UserButton } from "@clerk/nextjs";
-import { MessageSquare, Settings, Plus, Copy, Check } from "lucide-react";
+import { MessageSquare, Settings, Plus, Copy, Check, Compass } from "lucide-react";
 import CreateServerDialog from "@/components/modals/CreateServerDialog";
 
 interface User {
@@ -39,9 +39,19 @@ export default function WorkspaceNav({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showCreateServer, setShowCreateServer] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const isDMMode = pathname.startsWith("/dm");
 
   const handleServerClick = (serverId: string) => {
     router.push(`/channel?server=${serverId}`);
+  };
+
+  const handleDMClick = () => {
+    router.push("/dm");
+  };
+
+  const handleExploreClick = () => {
+    // Navigate to explore/browse servers page
+    router.push("/explore");
   };
 
   const copyInvite = (e: React.MouseEvent, code: string, id: string) => {
@@ -52,17 +62,30 @@ export default function WorkspaceNav({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Calculate unread badges (mock data for now - would come from props/context)
+  const getUnreadCount = (serverId: string) => {
+    // This would be calculated from actual unread messages
+    return 0;
+  };
+
   return (
     <nav className="workspace-nav">
-      <Link href="/dm" className="nav-logo" id="nav-logo" data-tooltip-right="Direct Messages">
+      {/* DMs Shortcut Button */}
+      <button
+        onClick={handleDMClick}
+        className={`nav-logo ${isDMMode ? "nav-logo--active" : ""}`}
+        id="nav-dm-shortcut"
+        data-tooltip-right="Direct Messages"
+      >
         <MessageSquare size={18} />
-      </Link>
+      </button>
 
       <div className="nav-divider" />
 
       <div className="server-list">
         {servers.map((server) => {
           const isActive = activeServerId === server.id;
+          const unreadCount = getUnreadCount(server.id);
           return (
             <div key={server.id} className="server-item-wrap">
               <button
@@ -76,6 +99,9 @@ export default function WorkspaceNav({
                   <span className="server-emoji">{server.icon}</span>
                 ) : (
                   <span className="server-letter">{server.name[0].toUpperCase()}</span>
+                )}
+                {unreadCount > 0 && (
+                  <div className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</div>
                 )}
               </button>
               {isActive && server.inviteCode && (
@@ -91,6 +117,7 @@ export default function WorkspaceNav({
           );
         })}
 
+        {/* Add Server Button */}
         <button
           className="server-icon server-icon--add"
           onClick={() => setShowCreateServer(true)}
@@ -98,6 +125,16 @@ export default function WorkspaceNav({
           id="add-server-btn"
         >
           <Plus size={18} />
+        </button>
+
+        {/* Explore Servers Button */}
+        <button
+          className="server-icon server-icon--explore"
+          onClick={handleExploreClick}
+          data-tooltip-right="Explore Servers"
+          id="explore-servers-btn"
+        >
+          <Compass size={18} />
         </button>
       </div>
 
@@ -157,7 +194,7 @@ export default function WorkspaceNav({
           display: flex; align-items: center; justify-content: center;
           background: var(--gradient-primary);
           border-radius: 14px; color: white;
-          text-decoration: none;
+          text-decoration: none; border: none; cursor: pointer;
           transition: all 0.3s var(--ease-smooth);
           flex-shrink: 0;
           box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
@@ -165,6 +202,9 @@ export default function WorkspaceNav({
         .nav-logo:hover {
           border-radius: 12px; transform: scale(1.08);
           box-shadow: var(--shadow-glow);
+        }
+        .nav-logo--active {
+          box-shadow: 0 0 0 3px var(--accent-gold);
         }
         .nav-divider {
           width: 26px; height: 2px;
@@ -225,6 +265,39 @@ export default function WorkspaceNav({
           border-color: var(--accent-emerald);
           background: rgba(52, 211, 153, 0.08);
           color: var(--accent-emerald);
+        }
+        .server-icon--explore {
+          background: transparent;
+          border: 2px dashed var(--border-primary);
+          color: var(--text-muted);
+        }
+        .server-icon--explore:hover {
+          border-style: solid;
+          border-color: var(--accent-gold);
+          background: var(--accent-gold-dim);
+          color: var(--accent-gold);
+        }
+        .unread-badge {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--accent-error, #EF4444);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+          border: 2px solid var(--bg-secondary);
+          animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
         }
         .invite-copy-mini {
           margin-top: 2px;

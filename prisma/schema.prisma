@@ -131,6 +131,7 @@ model Message {
   isSystem   Boolean  @default(false)
   encrypted  Boolean  @default(false)
   iv         String?  // Initialization vector for E2E encryption
+  salt       String?  // Salt for HKDF key derivation
   keyVersion Int?     // Key version for E2E encryption with rotation
   channelId  String
   userId     String
@@ -193,8 +194,10 @@ model UserSettings {
   // Appearance
   timeFormat            String  @default("12h") // "12h" | "24h"
   dateFormat            String  @default("MM/DD/YYYY")
-  // E2E
-  publicKey             String? // ECDH public key (JWK JSON)
+  // E2E Encryption
+  publicKey             String? // Legacy ECDH P-256 public key (JWK JSON)
+  x25519PublicKey       String? // X25519 public key (base64-encoded)
+  x25519KeyVersion      Int     @default(1) // For key rotation
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -272,4 +275,19 @@ model DMSessionKey {
   @@unique([conversationId, keyVersion])
   @@index([conversationId])
   @@index([expiresAt]) // For cleanup job
+}
+
+model KeyVerification {
+  id             String   @id @default(cuid())
+  userId         String   // The user who verified
+  verifiedUserId String   // The user being verified
+  conversationId String   // Sorted userId pair: "user1_user2"
+  verified       Boolean  @default(true)
+  safetyNumber   String   // The safety number that was verified
+  verifiedAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, verifiedUserId])
+  @@index([userId])
+  @@index([conversationId])
 }

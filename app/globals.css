@@ -731,3 +731,38 @@ body {
   opacity: 1;
   transform: translateY(-50%) translateX(0);
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Design System Tokens - Additional Mappings
+   Extends existing theme with semantic token mappings for
+   Radix UI components and future design system usage
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Additional semantic mappings for design tokens */
+  --accent-primary: var(--accent-gold);
+  --accent-primary-hover: var(--accent-brass);
+  --accent-primary-active: #6B5F4E;
+  
+  /* Status colors for semantic components */
+  --status-success: var(--accent-emerald);
+  --status-warning: var(--accent-amber);
+  --status-error: var(--accent-rose);
+  --status-info: var(--accent-cyan);
+  
+  /* Border tokens for focus states */
+  --border-focus: var(--accent-gold);
+}
+
+[data-theme="light"] {
+  --accent-primary: var(--accent-gold);
+  --accent-primary-hover: #6B5F4E;
+  --accent-primary-active: #5A4F3E;
+  
+  --status-success: #4FAA74;
+  --status-warning: #B09060;
+  --status-error: #B0686E;
+  --status-info: #4A949E;
+  
+  --border-focus: var(--accent-gold);
+}

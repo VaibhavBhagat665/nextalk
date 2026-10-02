@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Image from "next/image";
 import { formatRelativeTime, getInitials } from "@/lib/utils";
 import {
@@ -13,6 +14,7 @@ import {
   PartyPopper,
   Flame,
   Eye,
+  Lock,
 } from "lucide-react";
 
 interface Message {
@@ -27,6 +29,7 @@ interface Message {
   fileName?: string | null;
   fileType?: string | null;
   createdAt: string;
+  encrypted?: boolean;
   user?: {
     id: string;
     username: string;
@@ -69,8 +72,8 @@ function formatDateSeparator(dateStr: string): string {
 }
 
 /**
- * MessageList — Scrollable chat feed with avatar grouping, date separators,
- * file attachments, and reaction picker. Theme-aware styling.
+ * MessageList — Virtualized scrollable chat feed with avatar grouping, date separators,
+ * file attachments, and reaction picker. Theme-aware styling with optimized rendering.
  */
 export default function MessageList({
   messages,
@@ -87,9 +90,66 @@ export default function MessageList({
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
 }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const topObserverRef = useRef<HTMLDivElement>(null);
+  const previousScrollHeightRef = useRef<number>(0);
+  const wasAtBottomRef = useRef<boolean>(true);
+
+  // Virtualization setup with overscan for smooth scrolling
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: useCallback((index: number) => {
+      // Estimate message height based on content
+      const msg = messages[index];
+      if (!msg) return 60;
+      
+      let height = 30; // Base height for grouped message
+      
+      // Check if this message shows avatar (not grouped)
+      const prevMsg = messages[index - 1];
+      const prevUsername = prevMsg?.user?.username || prevMsg?.username;
+      const username = msg.user?.username || msg.username;
+      let showAvatar = true;
+      
+      if (prevMsg && prevUsername === username) {
+        const currentTime = new Date(msg.createdAt).getTime();
+        const prevTime = new Date(prevMsg.createdAt).getTime();
+        const timeDiffMinutes = (currentTime - prevTime) / (1000 * 60);
+        showAvatar = timeDiffMinutes > 5;
+      }
+      
+      if (showAvatar) {
+        height += 30; // Header + spacing
+      }
+      
+      // Add height for content
+      if (msg.content) {
+        const lineCount = Math.ceil(msg.content.length / 50);
+        height += lineCount * 22;
+      }
+      
+      // Add height for file attachments
+      if (msg.fileUrl) {
+        height += msg.fileType?.startsWith("image/") ? 310 : 50;
+      }
+      
+      // Add height for reactions
+      if (msg.reactions && msg.reactions.length > 0) {
+        height += 35;
+      }
+      
+      // Add height for date separator
+      const currentDate = new Date(msg.createdAt).toDateString();
+      const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : null;
+      if (!prevMsg || currentDate !== prevDate) {
+        height += 50;
+      }
+      
+      return height;
+    }, [messages]),
+    overscan: 5, // Render 5 items above and below visible area for smooth scrolling
+  });
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -109,12 +169,63 @@ export default function MessageList({
     return () => observer.disconnect();
   }, [hasMore, onLoadMore, isLoadingMore]);
 
+  // Scroll position preservation logic
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Check if we were at the bottom before update
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    
+    wasAtBottomRef.current = distanceFromBottom < 100;
   }, [messages]);
+
+  // Auto-scroll to bottom on new messages if user was already at bottom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Only auto-scroll if user was at the bottom
+    if (wasAtBottomRef.current && messages.length > 0) {
+      requestAnimationFrame(() => {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "smooth",
+        });
+      });
+    }
+  }, [messages.length, messages]);
+
+  // Restore scroll position after loading older messages
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const previousScrollHeight = previousScrollHeightRef.current;
+    
+    if (previousScrollHeight > 0 && isLoadingMore === false) {
+      // Restore scroll position by calculating the difference in scroll height
+      const currentScrollHeight = container.scrollHeight;
+      const scrollDiff = currentScrollHeight - previousScrollHeight;
+      
+      if (scrollDiff > 0) {
+        container.scrollTop += scrollDiff;
+      }
+      
+      previousScrollHeightRef.current = 0;
+    } else if (isLoadingMore) {
+      // Store current scroll height before loading
+      previousScrollHeightRef.current = container.scrollHeight;
+    }
+  }, [isLoadingMore]);
 
   const isImageFile = (type?: string | null) =>
     type?.startsWith("image/") || false;
+
+  const items = virtualizer.getVirtualItems();
 
   return (
     <div className="message-list" ref={containerRef}>
@@ -128,158 +239,197 @@ export default function MessageList({
         </div>
       )}
 
-      {/* Invisible element to trigger infinite scroll */}
-      {hasMore && <div ref={topObserverRef} style={{ height: 1 }} />}
-      {isLoadingMore && (
-        <div className="loading-more">
-          <div className="spinner-small" />
-        </div>
-      )}
+      {messages.length > 0 && (
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {/* Invisible element to trigger infinite scroll */}
+          {hasMore && <div ref={topObserverRef} style={{ height: 1, position: "absolute", top: 0 }} />}
+          {isLoadingMore && (
+            <div className="loading-more">
+              <div className="spinner-small" />
+            </div>
+          )}
 
-      {messages.map((msg, index) => {
-        const username = msg.user?.username || msg.username;
-        const avatarUrl = msg.user?.imageUrl || msg.imageUrl;
-        const msgId = msg.id || msg.tempId || `msg-${index}`;
-        const prevMsg = messages[index - 1];
-        const prevUsername = prevMsg?.user?.username || prevMsg?.username;
-        const showAvatar = !prevMsg || prevUsername !== username;
+          {items.map((virtualItem) => {
+            const index = virtualItem.index;
+            const msg = messages[index];
+            if (!msg) return null;
 
-        // Date separator logic
-        const currentDate = new Date(msg.createdAt).toDateString();
-        const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : null;
-        const showDateSeparator = !prevMsg || currentDate !== prevDate;
+            const username = msg.user?.username || msg.username;
+            const avatarUrl = msg.user?.imageUrl || msg.imageUrl;
+            const msgId = msg.id || msg.tempId || `msg-${index}`;
+            const prevMsg = messages[index - 1];
+            const prevUsername = prevMsg?.user?.username || prevMsg?.username;
+            
+            // Message grouping logic: group consecutive messages from same user within 5 minutes
+            let showAvatar = true;
+            if (prevMsg && prevUsername === username) {
+              const currentTime = new Date(msg.createdAt).getTime();
+              const prevTime = new Date(prevMsg.createdAt).getTime();
+              const timeDiffMinutes = (currentTime - prevTime) / (1000 * 60);
+              // Only show avatar if more than 5 minutes have passed
+              showAvatar = timeDiffMinutes > 5;
+            }
 
-        // Group reactions by emoji
-        const groupedReactions = (msg.reactions || []).reduce(
-          (acc, r) => {
-            if (!acc[r.emoji]) acc[r.emoji] = [];
-            acc[r.emoji]!.push(r);
-            return acc;
-          },
-          {} as Record<string, typeof msg.reactions>
-        );
+            // Date separator logic
+            const currentDate = new Date(msg.createdAt).toDateString();
+            const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : null;
+            const showDateSeparator = !prevMsg || currentDate !== prevDate;
 
-        return (
-          <div key={msgId}>
-            {/* Date Separator */}
-            {showDateSeparator && (
-              <div className="date-separator">
-                <div className="date-line" />
-                <span className="date-label">{formatDateSeparator(msg.createdAt)}</span>
-                <div className="date-line" />
-              </div>
-            )}
+            // Group reactions by emoji
+            const groupedReactions = (msg.reactions || []).reduce(
+              (acc, r) => {
+                if (!acc[r.emoji]) acc[r.emoji] = [];
+                acc[r.emoji]!.push(r);
+                return acc;
+              },
+              {} as Record<string, typeof msg.reactions>
+            );
 
-            <div
-              className={`message-bubble ${showAvatar ? "message-bubble--spaced" : ""}`}
-              id={`message-${msgId}`}
-            >
-              {showAvatar ? (
-                <div className="message-avatar">
-                  {avatarUrl ? (
-                    <Image
-                      src={avatarUrl}
-                      alt={username}
-                      width={36}
-                      height={36}
-                      className="avatar-img"
-                    />
-                  ) : (
-                    <div className="avatar-fallback">
-                      {getInitials(username)}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="message-avatar-spacer" />
-              )}
-
-              <div className="message-body">
-                {showAvatar && (
-                  <div className="message-header">
-                    <span className="message-author">{username}</span>
-                    <span className="message-time">
-                      {formatRelativeTime(msg.createdAt)}
-                    </span>
+            return (
+              <div
+                key={msgId}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                {/* Date Separator */}
+                {showDateSeparator && (
+                  <div className="date-separator">
+                    <div className="date-line" />
+                    <span className="date-label">{formatDateSeparator(msg.createdAt)}</span>
+                    <div className="date-line" />
                   </div>
                 )}
 
-                {msg.content && (
-                  <p className="message-text">{msg.content}</p>
-                )}
-
-                {/* File attachment */}
-                {msg.fileUrl && (
-                  <div className="message-attachment">
-                    {isImageFile(msg.fileType) ? (
-                      <div className="attachment-image">
+                <div
+                  className={`message-bubble ${showAvatar ? "message-bubble--spaced" : ""}`}
+                  id={`message-${msgId}`}
+                >
+                  {showAvatar ? (
+                    <div className="message-avatar">
+                      {avatarUrl ? (
                         <Image
-                          src={msg.fileUrl}
-                          alt={msg.fileName || "Image"}
-                          width={400}
-                          height={300}
-                          className="attachment-img"
-                          style={{ objectFit: "contain" }}
+                          src={avatarUrl}
+                          alt={username}
+                          width={36}
+                          height={36}
+                          className="avatar-img"
                         />
+                      ) : (
+                        <div className="avatar-fallback">
+                          {getInitials(username)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="message-avatar-spacer" />
+                  )}
+
+                  <div className="message-body">
+                    {showAvatar && (
+                      <div className="message-header">
+                        <span className="message-author">{username}</span>
+                        <span className="message-time">
+                          {formatRelativeTime(msg.createdAt)}
+                        </span>
                       </div>
-                    ) : (
-                      <a
-                        href={msg.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="attachment-file"
-                      >
-                        <Paperclip size={15} />
-                        <span>{msg.fileName || "Download file"}</span>
-                        <Download size={13} />
-                      </a>
+                    )}
+
+                    {msg.content && (
+                      <div className="message-content-wrapper">
+                        <p className={`message-text ${msg.content.includes('[Unable to decrypt]') ? 'message-text--error' : ''}`}>
+                          {msg.content}
+                        </p>
+                        {msg.encrypted && !msg.content.includes('[Unable to decrypt]') && (
+                          <span className="encrypted-badge" title="End-to-end encrypted">
+                            <Lock size={11} />
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* File attachment */}
+                    {msg.fileUrl && (
+                      <div className="message-attachment">
+                        {isImageFile(msg.fileType) ? (
+                          <div className="attachment-image">
+                            <Image
+                              src={msg.fileUrl}
+                              alt={msg.fileName || "Image"}
+                              width={400}
+                              height={300}
+                              className="attachment-img"
+                              style={{ objectFit: "contain" }}
+                            />
+                          </div>
+                        ) : (
+                          <a
+                            href={msg.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="attachment-file"
+                          >
+                            <Paperclip size={15} />
+                            <span>{msg.fileName || "Download file"}</span>
+                            <Download size={13} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reactions */}
+                    {Object.keys(groupedReactions).length > 0 && (
+                      <div className="message-reactions">
+                        {Object.entries(groupedReactions).map(([emoji, users]) => {
+                          const IconComponent = REACTION_ICON_MAP[emoji];
+                          return (
+                            <button
+                              key={emoji}
+                              className={`reaction ${
+                                users?.some((u) => u.userId === currentUserId)
+                                  ? "reaction--active"
+                                  : ""
+                              }`}
+                              onClick={() => onReact(msgId, emoji)}
+                            >
+                              {IconComponent ? <IconComponent size={13} /> : <span>{emoji}</span>}
+                              <span className="reaction-count">{users?.length}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
-                )}
 
-                {/* Reactions */}
-                {Object.keys(groupedReactions).length > 0 && (
-                  <div className="message-reactions">
-                    {Object.entries(groupedReactions).map(([emoji, users]) => {
-                      const IconComponent = REACTION_ICON_MAP[emoji];
-                      return (
-                        <button
-                          key={emoji}
-                          className={`reaction ${
-                            users?.some((u) => u.userId === currentUserId)
-                              ? "reaction--active"
-                              : ""
-                          }`}
-                          onClick={() => onReact(msgId, emoji)}
-                        >
-                          {IconComponent ? <IconComponent size={13} /> : <span>{emoji}</span>}
-                          <span className="reaction-count">{users?.length}</span>
-                        </button>
-                      );
-                    })}
+                  {/* Reaction picker (on hover) */}
+                  <div className="message-actions">
+                    {REACTION_LIST.map((reaction) => (
+                      <button
+                        key={reaction.emoji}
+                        className="action-btn"
+                        onClick={() => onReact(msgId, reaction.emoji)}
+                        title={reaction.label}
+                      >
+                        <reaction.icon size={14} />
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
               </div>
-
-              {/* Reaction picker (on hover) */}
-              <div className="message-actions">
-                {REACTION_LIST.map((reaction) => (
-                  <button
-                    key={reaction.emoji}
-                    className="action-btn"
-                    onClick={() => onReact(msgId, reaction.emoji)}
-                    title={reaction.label}
-                  >
-                    <reaction.icon size={14} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-
-      <div ref={bottomRef} />
+            );
+          })}
+        </div>
+      )}
 
       <style jsx>{`
         .message-list {
@@ -356,6 +506,7 @@ export default function MessageList({
           border-radius: var(--radius-sm);
           position: relative;
           transition: background-color 0.2s ease;
+          margin-top: 2px; /* Reduced spacing within groups */
         }
 
         .message-bubble:hover {
@@ -363,7 +514,7 @@ export default function MessageList({
         }
 
         .message-bubble--spaced {
-          margin-top: 14px;
+          margin-top: 14px; /* Larger spacing between groups */
         }
 
         .message-avatar {
@@ -420,12 +571,44 @@ export default function MessageList({
           font-weight: 400;
         }
 
+        .message-content-wrapper {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
+
         .message-text {
           font-size: 14px;
           line-height: 1.6;
           color: var(--text-secondary);
           word-break: break-word;
           white-space: pre-wrap;
+          flex: 1;
+        }
+
+        .message-text--error {
+          color: var(--text-muted);
+          font-style: italic;
+          opacity: 0.8;
+        }
+
+        .encrypted-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2px;
+          color: var(--accent-emerald);
+          background: rgba(16, 185, 129, 0.08);
+          border-radius: 4px;
+          flex-shrink: 0;
+          margin-top: 2px;
+          cursor: help;
+          transition: all 0.2s ease;
+        }
+
+        .encrypted-badge:hover {
+          background: rgba(16, 185, 129, 0.15);
+          transform: scale(1.1);
         }
 
         /* File attachment */

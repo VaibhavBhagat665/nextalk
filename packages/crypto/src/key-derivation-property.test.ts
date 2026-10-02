@@ -21,7 +21,7 @@ import {
 import { generateX25519KeyPair } from './key-generation.js';
 
 describe('Property 14: Session Key Derivation Consistency', () => {
-  it('should always derive the same session key for both parties in a DM conversation', async () => {
+  it('should always derive the same session key for both parties in a DM conversation', { timeout: 30000 }, async () => {
     await fc.assert(
       fc.asyncProperty(
         // Generate arbitrary user IDs

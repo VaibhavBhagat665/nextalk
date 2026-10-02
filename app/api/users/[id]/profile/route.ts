@@ -12,7 +12,13 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     const userProfile = await prisma.user.findUnique({
       where: { id: params.id },
       include: {
-        settings: { select: { allowDmsFromNonMembers: true } },
+        settings: { 
+          select: { 
+            allowDmsFromNonMembers: true,
+            x25519PublicKey: true,
+            x25519KeyVersion: true,
+          } 
+        },
       },
     });
 
@@ -25,6 +31,8 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
       imageUrl: userProfile.imageUrl,
       statusMessage: userProfile.statusMessage,
       allowDmsFromNonMembers: userProfile.settings?.allowDmsFromNonMembers ?? true,
+      x25519PublicKey: userProfile.settings?.x25519PublicKey ?? null,
+      x25519KeyVersion: userProfile.settings?.x25519KeyVersion ?? 1,
     });
   } catch (error) {
     console.error("[USER_PROFILE_GET]", error);

@@ -10,7 +10,7 @@ import OnlineUsers from "./OnlineUsers";
 import {
   Plus, Compass, ChevronDown, ChevronRight,
   Search, Menu, X, Hash, Volume2, Copy, Check, Smartphone,
-  MessageSquare, Lock,
+  MessageSquare, Lock, ShieldCheck,
 } from "lucide-react";
 import DownloadAppDialog from "./DownloadAppDialog";
 
@@ -27,6 +27,7 @@ interface Channel {
   voiceUsers?: { id: string; username: string; imageUrl: string | null; muted: boolean }[];
   targetUserId?: string;
   isOnline?: boolean;
+  isVerified?: boolean;
 }
 
 interface User {
@@ -136,7 +137,14 @@ export default function Sidebar({
                           )}
                           <div className={`status-dot ${channel.isOnline ? "online" : "offline"}`} />
                         </div>
-                        <span className="dm-name">{channel.name}</span>
+                        <span className="dm-name-wrapper">
+                          <span className="dm-name">{channel.name}</span>
+                          {channel.isVerified && (
+                            <span className="verified-badge" title="Verified end-to-end encryption">
+                              <ShieldCheck size={12} />
+                            </span>
+                          )}
+                        </span>
                       </Link>
                     );
                   })
@@ -217,7 +225,31 @@ export default function Sidebar({
                 {voiceOpen && (
                   <div className="section-content">
                     {voiceChannels.length > 0 ? (
-                      <ChannelList channels={voiceChannels} currentPath={pathname} isVoice />
+                      <>
+                        <ChannelList channels={voiceChannels} currentPath={pathname} isVoice />
+                        {voiceChannels.some(c => c.voiceUsers && c.voiceUsers.length > 0) && (
+                          <div className="voice-participants">
+                            {voiceChannels.filter(c => c.voiceUsers && c.voiceUsers.length > 0).map(channel => (
+                              <div key={channel.id} className="voice-channel-users">
+                                <div className="voice-channel-name">{channel.name}</div>
+                                {channel.voiceUsers!.map(user => (
+                                  <div key={user.id} className="voice-user">
+                                    {user.imageUrl ? (
+                                      <img src={user.imageUrl} alt={user.username} className="voice-user-avatar" />
+                                    ) : (
+                                      <div className="voice-user-avatar-fallback">
+                                        {user.username[0]?.toUpperCase()}
+                                      </div>
+                                    )}
+                                    <span className="voice-user-name">{user.username}</span>
+                                    {user.muted && <span className="voice-user-muted" title="Muted">🔇</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="empty-channels"><Volume2 size={14} /><span>No voice channels</span></div>
                     )}
@@ -390,10 +422,70 @@ export default function Sidebar({
         }
         .status-dot.online { background: var(--accent-emerald); }
         .status-dot.offline { background: var(--text-muted); }
+        .dm-name-wrapper {
+          display: flex; align-items: center; gap: 6px; flex: 1;
+        }
         .dm-name { font-size: 14px; font-weight: 500; }
+        .verified-badge {
+          display: flex; align-items: center; justify-content: center;
+          color: var(--accent-emerald); flex-shrink: 0;
+        }
         .empty-dms {
           padding: 16px; text-align: center; color: var(--text-muted);
           font-size: 12px; font-style: italic;
+        }
+        .voice-participants {
+          margin-top: 8px;
+        }
+        .voice-channel-users {
+          padding: 8px 12px;
+          margin: 4px 8px;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: var(--radius-sm);
+        }
+        .voice-channel-name {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          margin-bottom: 6px;
+          letter-spacing: 0.5px;
+        }
+        .voice-user {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 0;
+          font-size: 13px;
+          color: var(--text-secondary);
+        }
+        .voice-user-avatar, .voice-user-avatar-fallback {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .voice-user-avatar {
+          object-fit: cover;
+        }
+        .voice-user-avatar-fallback {
+          background: var(--gradient-primary);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 700;
+        }
+        .voice-user-name {
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .voice-user-muted {
+          font-size: 10px;
+          opacity: 0.7;
         }
         @media (max-width: 768px) {
           .mobile-toggle { display: flex; }
