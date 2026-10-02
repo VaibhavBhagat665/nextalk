@@ -15,7 +15,11 @@ import {
   Flame,
   Eye,
   Lock,
+  MoreHorizontal,
 } from "lucide-react";
+import MessageContextMenu from "./MessageContextMenu";
+import UserContextMenu from "./UserContextMenu";
+import UserProfilePopover from "./UserProfilePopover";
 
 interface Message {
   id?: string;
@@ -79,6 +83,17 @@ export default function MessageList({
   messages,
   currentUserId,
   onReact,
+  onReply,
+  onEdit,
+  onDelete,
+  onPin,
+  onCopyLink,
+  onViewProfile,
+  onMessage,
+  onVoiceCall,
+  onVideoCall,
+  onMuteUser,
+  onKickUser,
   hasMore,
   onLoadMore,
   isLoadingMore,
@@ -86,6 +101,17 @@ export default function MessageList({
   messages: Message[];
   currentUserId: string;
   onReact: (messageId: string, emoji: string) => void;
+  onReply?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onPin?: (messageId: string) => void;
+  onCopyLink?: (messageId: string) => void;
+  onViewProfile?: (userId: string) => void;
+  onMessage?: (userId: string) => void;
+  onVoiceCall?: (userId: string) => void;
+  onVideoCall?: (userId: string) => void;
+  onMuteUser?: (userId: string) => void;
+  onKickUser?: (userId: string) => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
@@ -316,21 +342,45 @@ export default function MessageList({
                   id={`message-${msgId}`}
                 >
                   {showAvatar ? (
-                    <div className="message-avatar">
-                      {avatarUrl ? (
-                        <Image
-                          src={avatarUrl}
-                          alt={username}
-                          width={36}
-                          height={36}
-                          className="avatar-img"
-                        />
-                      ) : (
-                        <div className="avatar-fallback">
-                          {getInitials(username)}
+                    <UserProfilePopover
+                      userId={msg.userId}
+                      username={username}
+                      imageUrl={avatarUrl}
+                      isCurrentUser={msg.userId === currentUserId}
+                      onMessage={onMessage}
+                      onVoiceCall={onVoiceCall}
+                      onVideoCall={onVideoCall}
+                      onViewFullProfile={onViewProfile}
+                    >
+                      <UserContextMenu
+                        userId={msg.userId}
+                        username={username}
+                        isCurrentUser={msg.userId === currentUserId}
+                        canModerate={false}
+                        onViewProfile={onViewProfile}
+                        onMessage={onMessage}
+                        onVoiceCall={onVoiceCall}
+                        onVideoCall={onVideoCall}
+                        onMute={onMuteUser}
+                        onKick={onKickUser}
+                      >
+                        <div className="message-avatar">
+                          {avatarUrl ? (
+                            <Image
+                              src={avatarUrl}
+                              alt={username}
+                              width={36}
+                              height={36}
+                              className="avatar-img"
+                            />
+                          ) : (
+                            <div className="avatar-fallback">
+                              {getInitials(username)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      </UserContextMenu>
+                    </UserProfilePopover>
                   ) : (
                     <div className="message-avatar-spacer" />
                   )}
@@ -338,7 +388,31 @@ export default function MessageList({
                   <div className="message-body">
                     {showAvatar && (
                       <div className="message-header">
-                        <span className="message-author">{username}</span>
+                        <UserProfilePopover
+                          userId={msg.userId}
+                          username={username}
+                          imageUrl={avatarUrl}
+                          isCurrentUser={msg.userId === currentUserId}
+                          onMessage={onMessage}
+                          onVoiceCall={onVoiceCall}
+                          onVideoCall={onVideoCall}
+                          onViewFullProfile={onViewProfile}
+                        >
+                          <UserContextMenu
+                            userId={msg.userId}
+                            username={username}
+                            isCurrentUser={msg.userId === currentUserId}
+                            canModerate={false}
+                            onViewProfile={onViewProfile}
+                            onMessage={onMessage}
+                            onVoiceCall={onVoiceCall}
+                            onVideoCall={onVideoCall}
+                            onMute={onMuteUser}
+                            onKick={onKickUser}
+                          >
+                            <span className="message-author">{username}</span>
+                          </UserContextMenu>
+                        </UserProfilePopover>
                         <span className="message-time">
                           {formatRelativeTime(msg.createdAt)}
                         </span>
@@ -423,6 +497,23 @@ export default function MessageList({
                         <reaction.icon size={14} />
                       </button>
                     ))}
+                    {/* Context Menu Button */}
+                    <MessageContextMenu
+                      messageId={msgId}
+                      isOwnMessage={msg.userId === currentUserId}
+                      canPin={true}
+                      onReply={onReply}
+                      onReact={() => {}}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      onPin={onPin}
+                      onCopyLink={onCopyLink}
+                      trigger="click"
+                    >
+                      <button className="action-btn" title="More options">
+                        <MoreHorizontal size={14} />
+                      </button>
+                    </MessageContextMenu>
                   </div>
                 </div>
               </div>
@@ -522,6 +613,12 @@ export default function MessageList({
           height: 36px;
           flex-shrink: 0;
           margin-top: 2px;
+          cursor: pointer;
+          transition: opacity 0.2s ease;
+        }
+
+        .message-avatar:hover {
+          opacity: 0.85;
         }
 
         .message-avatar :global(.avatar-img) {
@@ -563,6 +660,13 @@ export default function MessageList({
           font-weight: 600;
           color: var(--text-primary);
           letter-spacing: -0.01em;
+          cursor: pointer;
+          transition: color 0.2s ease;
+        }
+
+        .message-author:hover {
+          color: var(--accent-gold);
+          text-decoration: underline;
         }
 
         .message-time {

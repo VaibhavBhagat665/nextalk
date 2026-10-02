@@ -5,13 +5,25 @@ import Image from "next/image";
 import { useState } from "react";
 import { getInitials } from "@/lib/utils";
 import UserProfileModal from "@/components/modals/UserProfileModal";
+import UserProfilePopover from "@/components/chat/UserProfilePopover";
+import UserContextMenu from "@/components/chat/UserContextMenu";
+import { useRouter } from "next/navigation";
 
 export default function OnlineUsers({ currentUserId }: { currentUserId: string }) {
   const { onlineUsers } = usePresence();
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const router = useRouter();
 
   // Filter out current user
   const otherUsers = onlineUsers.filter((u) => u.userId !== currentUserId);
+
+  const handleViewProfile = (userId: string) => {
+    setSelectedUser(userId);
+  };
+
+  const handleMessage = (userId: string) => {
+    router.push(`/dm/${userId}`);
+  };
 
   return (
     <div className="online-users-wrapper">
@@ -21,31 +33,48 @@ export default function OnlineUsers({ currentUserId }: { currentUserId: string }
         </div>
         <div className="online-list">
           {otherUsers.map((user, index) => (
-            <button
+            <UserProfilePopover
               key={user.userId}
-              onClick={() => setSelectedUser(user.userId)}
-              className="online-user border-none bg-transparent w-full text-left"
-              id={`online-user-${user.userId}`}
-              style={{ animationDelay: `${index * 40}ms` }}
+              userId={user.userId}
+              username={user.username}
+              imageUrl={user.imageUrl}
+              onMessage={handleMessage}
+              onViewFullProfile={handleViewProfile}
             >
-              <div className="user-avatar-wrap">
-                {user.imageUrl ? (
-                  <Image
-                    src={user.imageUrl}
-                    alt={user.username}
-                    width={28}
-                    height={28}
-                    className="user-avatar-img"
-                  />
-                ) : (
-                  <div className="user-avatar-fallback">
-                    {getInitials(user.username)}
+              <UserContextMenu
+                userId={user.userId}
+                username={user.username}
+                isCurrentUser={false}
+                canModerate={false}
+                onViewProfile={handleViewProfile}
+                onMessage={handleMessage}
+              >
+                <button
+                  onClick={() => setSelectedUser(user.userId)}
+                  className="online-user border-none bg-transparent w-full text-left"
+                  id={`online-user-${user.userId}`}
+                  style={{ animationDelay: `${index * 40}ms` }}
+                >
+                  <div className="user-avatar-wrap">
+                    {user.imageUrl ? (
+                      <Image
+                        src={user.imageUrl}
+                        alt={user.username}
+                        width={28}
+                        height={28}
+                        className="user-avatar-img"
+                      />
+                    ) : (
+                      <div className="user-avatar-fallback">
+                        {getInitials(user.username)}
+                      </div>
+                    )}
+                    <div className="online-dot" />
                   </div>
-                )}
-                <div className="online-dot" />
-              </div>
-              <span className="user-name">{user.username}</span>
-            </button>
+                  <span className="user-name">{user.username}</span>
+                </button>
+              </UserContextMenu>
+            </UserProfilePopover>
           ))}
 
           {otherUsers.length === 0 && (
