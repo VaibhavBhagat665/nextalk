@@ -22,7 +22,7 @@ Real-time messaging, HD video calls, end-to-end encrypted DMs and community serv
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)
 ![Platforms](https://img.shields.io/badge/platforms-web%20%7C%20iOS%20%7C%20Android-blue?style=flat-square)
 
-[**Live Demo**](#) · [**Features**](#-features) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Report a Bug**](../../issues)
+[**Live Demo**](https://nextalk-website.vercel.app/) · [**Features**](#-features) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Report a Bug**](../../issues)
 
 <br />
 
