@@ -39,7 +39,10 @@ export default function ChannelPage() {
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showCallPicker, setShowCallPicker] = useState<"voice" | "video" | null>(null);
+  const [lastReadAt, setLastReadAt] = useState<Date | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { messages, setMessages, typingUsers, isConnected, sendMessage, startTyping, reactToMessage } = useSocket(channelId);
   const { callState, initiateCall, acceptCall, declineCall, endCall, toggleMic, toggleVideo } = useCall(user?.id);
@@ -52,6 +55,21 @@ export default function ChannelPage() {
         return r.json();
       })
       .then(setChannel)
+      .catch(console.error);
+  }, [channelId]);
+  
+  // Fetch last read position
+  useEffect(() => {
+    fetch(`/api/channels/${channelId}/last-read`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Last read fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (data.lastReadAt) {
+          setLastReadAt(new Date(data.lastReadAt));
+        }
+      })
       .catch(console.error);
   }, [channelId]);
 
@@ -74,6 +92,72 @@ export default function ChannelPage() {
       .catch(console.error)
       .finally(() => setLoadingHistory(false));
   }, [channelId, setMessages]);
+  
+  // Calculate unread count
+  useEffect(() => {
+    if (!lastReadAt || messages.length === 0) {
+      setUnreadCount(0);
+      return;
+    }
+    
+    const lastReadTime = new Date(lastReadAt).getTime();
+    const unread = messages.filter((msg) => {
+      const msgTime = new Date(msg.createdAt).getTime();
+      return msgTime > lastReadTime;
+    }).length;
+    
+    setUnreadCount(unread);
+  }, [messages, lastReadAt]);
+  
+  // Mark messages as read when user is at the bottom
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    const checkAndMarkAsRead = () => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      
+      // If user is near the bottom (within 100px), mark as read after 1 second
+      if (distanceFromBottom < 100 && messages.length > 0) {
+        if (markAsReadTimeoutRef.current) {
+          clearTimeout(markAsReadTimeoutRef.current);
+        }
+        
+        markAsReadTimeoutRef.current = setTimeout(() => {
+          fetch(`/api/channels/${channelId}/read`, {
+            method: "PATCH",
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.lastReadAt) {
+                setLastReadAt(new Date(data.lastReadAt));
+              }
+            })
+            .catch(console.error);
+        }, 1000);
+      } else {
+        // Clear timeout if user scrolled up
+        if (markAsReadTimeoutRef.current) {
+          clearTimeout(markAsReadTimeoutRef.current);
+          markAsReadTimeoutRef.current = null;
+        }
+      }
+    };
+    
+    container.addEventListener("scroll", checkAndMarkAsRead);
+    // Check immediately on mount
+    checkAndMarkAsRead();
+    
+    return () => {
+      container.removeEventListener("scroll", checkAndMarkAsRead);
+      if (markAsReadTimeoutRef.current) {
+        clearTimeout(markAsReadTimeoutRef.current);
+      }
+    };
+  }, [channelId, messages]);
 
   const handleSend = async (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
     sendMessage(content, fileUrl, fileName, fileType);
@@ -236,12 +320,15 @@ export default function ChannelPage() {
                   </div>
                 </div>
               ) : (
-                <MessageList messages={messages} currentUserId={user?.id || ""} onReact={reactToMessage} />
+                <MessageList messages={messages} currentUserId={user?.id || ""} lastReadAt={lastReadAt} onReact={reactToMessage} />
               )}
 
               {showScrollBtn && !loadingHistory && (
                 <button className="scroll-btn animate-scale-in" onClick={scrollToBottom} id="scroll-bottom">
                   <ChevronDown size={16} />
+                  {unreadCount > 0 && (
+                    <span className="scroll-btn-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                  )}
                 </button>
               )}
             </div>
@@ -512,6 +599,25 @@ export default function ChannelPage() {
           background: var(--accent-gold-dim);
           color: var(--accent-gold);
           border-color: rgba(197, 165, 90, 0.2);
+        }
+        
+        .scroll-btn-badge {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--accent-rose);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+          border: 2px solid var(--bg-secondary);
+          box-shadow: 0 2px 8px rgba(224, 107, 122, 0.3);
         }
 
         /* Skeleton */

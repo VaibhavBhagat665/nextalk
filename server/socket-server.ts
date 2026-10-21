@@ -7,6 +7,7 @@ import { PrismaClient } from "@prisma/client";
 import { latencyMiddleware } from "./latency-tracker";
 import { getAllMetrics, formatPrometheusMetrics } from "./metrics-service";
 import { sfuServer } from "./sfu-server";
+import { sendPushNotification } from "./push-notification-service";
 
 const app = express();
 const server = createServer(app);
@@ -104,7 +105,39 @@ if (REDIS_URL) {
 }
 
 // Presence tracking
-const onlineUsers = new Map<string, { socketId: string; username: string; imageUrl: string }>();
+type PresenceStatus = "online" | "away" | "offline";
+interface UserPresence {
+  socketId: string;
+  username: string;
+  imageUrl: string;
+  status: PresenceStatus;
+  lastActivity: number;
+}
+
+const onlineUsers = new Map<string, UserPresence>();
+
+// Check for idle users every 30 seconds
+const IDLE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+const AWAY_CHECK_INTERVAL = 30 * 1000; // 30 seconds
+
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  
+  for (const [userId, presence] of onlineUsers.entries()) {
+    const idleTime = now - presence.lastActivity;
+    const newStatus: PresenceStatus = idleTime > IDLE_THRESHOLD ? "away" : "online";
+    
+    if (presence.status !== newStatus) {
+      presence.status = newStatus;
+      changed = true;
+    }
+  }
+  
+  if (changed) {
+    broadcastPresence();
+  }
+}, AWAY_CHECK_INTERVAL);
 
 // Rate Limiting for messages
 const messageRateLimits = new Map<string, number[]>();
@@ -124,9 +157,106 @@ const broadcastPresence = () => {
       userId: id,
       username: data.username,
       imageUrl: data.imageUrl,
+      status: data.status,
     })));
     presenceUpdateTimeout = null;
   }, 2000);
+};
+
+/**
+ * Send push notification to offline users or users with backgrounded app
+ * @param channelId - Channel where message was sent
+ * @param senderId - User ID who sent the message
+ * @param senderUsername - Username of sender
+ * @param messageContent - Preview of message content
+ * @param channelName - Name of channel
+ */
+async function sendPushForNewMessage(
+  channelId: string,
+  senderId: string,
+  senderUsername: string,
+  messageContent: string,
+  channelName?: string
+): Promise<void> {
+  try {
+    // Get all members of the channel
+    const memberships = await prisma.membership.findMany({
+      where: { channelId },
+      include: {
+        user: {
+          include: {
+            pushTokens: {
+              where: { isActive: true },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter out the sender and online users
+    const offlineMembers = memberships.filter((membership) => {
+      const userId = membership.user.clerkId;
+      
+      // Don't send push to the sender
+      if (userId === senderId) return false;
+      
+      // Don't send push if user is online and active
+      const presence = onlineUsers.get(userId);
+      if (presence && presence.status === "online") return false;
+      
+      // Send push if user is offline or away, and has push tokens
+      return membership.user.pushTokens.length > 0;
+    });
+
+    if (offlineMembers.length === 0) {
+      return;
+    }
+
+    // Send push notifications to offline members
+    const pushPromises = offlineMembers.flatMap((membership) =>
+      membership.user.pushTokens.map((pushToken) => {
+        // Truncate message content for preview (max 100 chars)
+        const preview = messageContent.length > 100 
+          ? `${messageContent.substring(0, 97)}...`
+          : messageContent;
+
+        const title = channelName 
+          ? `${senderUsername} in ${channelName}`
+          : senderUsername;
+
+        return sendPushNotification({
+          userId: membership.user.clerkId,
+          pushToken: pushToken.token,
+          title,
+          body: preview,
+          data: {
+            type: "new_message",
+            channelId,
+            senderId,
+            senderUsername,
+          },
+        });
+      })
+    );
+
+    await Promise.all(pushPromises);
+    console.log(`📱 Sent ${pushPromises.length} push notifications for channel ${channelId}`);
+  } catch (error: any) {
+    console.error("Error sending push notifications:", error);
+  }
+}
+
+// Update user activity timestamp
+const updateUserActivity = (userId: string) => {
+  const presence = onlineUsers.get(userId);
+  if (presence) {
+    presence.lastActivity = Date.now();
+    // If user was away, set them back to online
+    if (presence.status === "away") {
+      presence.status = "online";
+      broadcastPresence();
+    }
+  }
 };
 
 /**
@@ -196,7 +326,7 @@ io.on("connection", (socket) => {
   console.log(`🟢 ${username} connected (${socket.id})`);
 
   // Track online presence
-  onlineUsers.set(userId, { socketId: socket.id, username, imageUrl });
+  onlineUsers.set(userId, { socketId: socket.id, username, imageUrl, status: "online", lastActivity: Date.now() });
   broadcastPresence();
 
   // Join channel room — with membership validation
@@ -612,6 +742,8 @@ io.on("connection", (socket) => {
     fileUrl?: string;
     fileName?: string;
     fileType?: string;
+    blurhash?: string;
+    imageDimensions?: { width: number; height: number };
     tempId: string;
   }) => {
     if (!data.channelId || !socket.rooms.has(`channel:${data.channelId}`)) {
@@ -621,6 +753,9 @@ io.on("connection", (socket) => {
       });
       return;
     }
+
+    // Update user activity (reset away status)
+    updateUserActivity(userId);
 
     // Rate Limiting (max 10 messages per 10 seconds)
     const now = Date.now();
@@ -651,6 +786,9 @@ io.on("connection", (socket) => {
       return;
     }
 
+    // Update user activity
+    updateUserActivity(userId);
+
     io.to(`channel:${data.channelId}`).emit("message:reaction", {
       ...data,
       userId,
@@ -662,9 +800,13 @@ io.on("connection", (socket) => {
   socket.on("typing:start", (channelId: string) => {
     if (!channelId || !socket.rooms.has(`channel:${channelId}`)) return;
 
+    // Update user activity
+    updateUserActivity(userId);
+
     socket.to(`channel:${channelId}`).emit("typing:update", {
       userId,
       username,
+      imageUrl,
       channelId,
       isTyping: true,
     });
@@ -676,6 +818,7 @@ io.on("connection", (socket) => {
     socket.to(`channel:${channelId}`).emit("typing:update", {
       userId,
       username,
+      imageUrl,
       channelId,
       isTyping: false,
     });

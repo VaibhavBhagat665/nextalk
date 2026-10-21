@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { getSocket } from "@/lib/socket";
 
-interface OnlineUser {
+export type PresenceStatus = "online" | "away" | "offline";
+
+export interface OnlineUser {
   userId: string;
   username: string;
   imageUrl: string;
+  status: PresenceStatus;
 }
 
 export function usePresence() {

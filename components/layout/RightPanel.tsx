@@ -15,6 +15,7 @@ import {
 import { getInitials } from "@/lib/utils";
 import AISummaryPanel from "@/components/chat/AISummaryPanel";
 import UserProfileModal from "@/components/modals/UserProfileModal";
+import { usePresence, type PresenceStatus } from "@/hooks/usePresence";
 
 interface ChannelInfo {
   id: string;
@@ -43,10 +44,17 @@ export default function RightPanel({
   onClose: () => void;
 }) {
   const { user } = useUser();
+  const { onlineUsers } = usePresence();
   const [activeTab, setActiveTab] = useState<"members" | "threads" | "ai">("members");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  // Helper to get presence status for a user
+  const getUserPresenceStatus = (userId: string): PresenceStatus => {
+    const presenceUser = onlineUsers.find(u => u.userId === userId);
+    return presenceUser?.status || "offline";
+  };
 
   const tabs = [
     { id: "members" as const, label: "Members", icon: Users },
@@ -214,6 +222,7 @@ export default function RightPanel({
                                   {getInitials(member.username)}
                                 </div>
                               )}
+                              <div className={`${getUserPresenceStatus(member.id)}-dot`} />
                             </div>
                             <div className="member-info">
                               <span className="member-name">{member.username}</span>
@@ -515,9 +524,21 @@ export default function RightPanel({
         }
 
         .member-avatar-wrap {
+          position: relative;
           width: 32px;
           height: 32px;
           flex-shrink: 0;
+        }
+
+        .member-avatar-wrap .online-dot,
+        .member-avatar-wrap .away-dot,
+        .member-avatar-wrap .offline-dot {
+          position: absolute;
+          bottom: -1px;
+          right: -1px;
+          width: 10px;
+          height: 10px;
+          border: 2px solid var(--bg-secondary);
         }
 
         .member-item :global(.member-avatar-img) {

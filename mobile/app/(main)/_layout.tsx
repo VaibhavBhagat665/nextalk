@@ -2,7 +2,7 @@ import { Tabs, Redirect } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
 import { useAppStore } from '../../lib/store';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
-import { MessageSquare, Users, Settings, Sparkles } from 'lucide-react-native';
+import { MessageSquare, Users, User } from 'lucide-react-native';
 
 export default function MainLayout() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -43,20 +43,7 @@ export default function MainLayout() {
           fontSize: 11,
           marginTop: 2,
         },
-        headerStyle: {
-          backgroundColor: colors.bgSecondary,
-          elevation: 0,
-          shadowColor: 'transparent',
-          borderBottomColor: colors.borderPrimary,
-          borderBottomWidth: 1,
-        },
-        headerTitleStyle: {
-          fontFamily: 'Fredoka-SemiBold',
-          fontSize: 20,
-          color: colors.textPrimary,
-          letterSpacing: -0.5,
-        },
-        headerTintColor: colors.textPrimary,
+        headerShown: false, // Hide header for tabs, let stacks handle it
       }}
     >
       <Tabs.Screen
@@ -67,24 +54,19 @@ export default function MainLayout() {
         }}
       />
       <Tabs.Screen
-        name="dm"
+        name="dms"
         options={{
-          title: 'Messages',
+          title: 'DMs',
           tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="profile"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
         }}
       />
-      {/* Hidden screens — not in tab bar */}
-      <Tabs.Screen name="channels/[serverId]" options={{ href: null, headerShown: true }} />
-      <Tabs.Screen name="chat/[channelId]" options={{ href: null, headerShown: true }} />
-      <Tabs.Screen name="summary/[channelId]" options={{ href: null, headerShown: true, title: 'AI Summary' }} />
-      <Tabs.Screen name="info/[channelId]" options={{ href: null, headerShown: true, title: 'Channel Info' }} />
     </Tabs>
   );
 }

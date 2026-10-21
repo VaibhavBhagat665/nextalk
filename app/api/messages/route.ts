@@ -5,7 +5,7 @@ import { decrypt } from "@/lib/encryption";
 import { getMessagesCursor } from "@/lib/cursor-pagination";
 import { getCachedMessages, setCachedMessages } from "@/lib/message-cache";
 
-// GET /api/messages?channelId=xxx&cursor=xxx&limit=30
+// GET /api/messages?channelId=xxx&cursor=xxx&limit=30&cacheOnly=true
 export async function GET(req: Request) {
   const { userId: clerkId } = await auth();
   if (!clerkId) {
@@ -16,6 +16,7 @@ export async function GET(req: Request) {
   const channelId = searchParams.get("channelId");
   const cursor = searchParams.get("cursor") || undefined;
   const limit = parseInt(searchParams.get("limit") || "50");
+  const cacheOnly = searchParams.get("cacheOnly") === "true";
 
   if (!channelId) {
     return NextResponse.json({ error: "channelId is required" }, { status: 400 });
@@ -31,6 +32,27 @@ export async function GET(req: Request) {
   });
   if (!membership) {
     return NextResponse.json({ error: "Not a member of this channel" }, { status: 403 });
+  }
+
+  // If cacheOnly mode, only check cache and return (for optimistic loading)
+  if (cacheOnly) {
+    const cachedMessages = await getCachedMessages(channelId);
+    if (cachedMessages !== null) {
+      // Don't decrypt here - let client handle it to avoid blocking
+      return NextResponse.json({
+        messages: cachedMessages.slice(0, limit),
+        nextCursor: cachedMessages.length > limit ? cachedMessages[limit - 1]?.id : null,
+        hasMore: cachedMessages.length > limit,
+        cached: true,
+      });
+    }
+    // Cache miss - return empty array for cacheOnly mode
+    return NextResponse.json({
+      messages: [],
+      nextCursor: null,
+      hasMore: false,
+      cached: false,
+    });
   }
 
   // Try cache first (only for first page, no cursor)

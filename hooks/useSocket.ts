@@ -15,6 +15,8 @@ interface Message {
   fileUrl?: string;
   fileName?: string;
   fileType?: string;
+  blurhash?: string;
+  imageDimensions?: { width: number; height: number };
   createdAt: string;
   reactions?: { emoji: string; userId: string; username: string }[];
 }
@@ -28,6 +30,7 @@ interface OnlineUser {
 interface TypingUser {
   userId: string;
   username: string;
+  imageUrl?: string | null;
 }
 
 export function useSocket(channelId: string | null) {
@@ -162,6 +165,7 @@ export function useSocket(channelId: string | null) {
     const handleTyping = (data: {
       userId: string;
       username: string;
+      imageUrl?: string | null;
       channelId: string;
       isTyping: boolean;
     }) => {
@@ -169,7 +173,7 @@ export function useSocket(channelId: string | null) {
         setTypingUsers((prev) => {
           if (data.isTyping) {
             if (!prev.find((u) => u.userId === data.userId)) {
-              return [...prev, { userId: data.userId, username: data.username }];
+              return [...prev, { userId: data.userId, username: data.username, imageUrl: data.imageUrl }];
             }
             return prev;
           }
@@ -192,7 +196,14 @@ export function useSocket(channelId: string | null) {
 
   // Send message
   const sendMessage = useCallback(
-    (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
+    (
+      content: string,
+      fileUrl?: string,
+      fileName?: string,
+      fileType?: string,
+      blurhash?: string,
+      imageDimensions?: { width: number; height: number }
+    ) => {
       const socket = getSocket();
       if (!socket?.connected || !channelId || !userId || !user) return;
 
@@ -208,6 +219,8 @@ export function useSocket(channelId: string | null) {
         fileUrl,
         fileName,
         fileType,
+        blurhash,
+        imageDimensions,
         createdAt: new Date().toISOString(),
       };
 
@@ -219,6 +232,8 @@ export function useSocket(channelId: string | null) {
         fileUrl,
         fileName,
         fileType,
+        blurhash,
+        imageDimensions,
         tempId,
       });
     },

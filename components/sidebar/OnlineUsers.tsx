@@ -69,7 +69,7 @@ export default function OnlineUsers({ currentUserId }: { currentUserId: string }
                         {getInitials(user.username)}
                       </div>
                     )}
-                    <div className="online-dot" />
+                    <div className={`${user.status}-dot`} />
                   </div>
                   <span className="user-name">{user.username}</span>
                 </button>
@@ -155,7 +155,9 @@ export default function OnlineUsers({ currentUserId }: { currentUserId: string }
           color: #1a1400;
         }
 
-        .user-avatar-wrap .online-dot {
+        .user-avatar-wrap .online-dot,
+        .user-avatar-wrap .away-dot,
+        .user-avatar-wrap .offline-dot {
           position: absolute;
           bottom: -1px;
           right: -1px;

@@ -7,6 +7,7 @@ import ChannelList from "./ChannelList";
 import CreateChannelDialog from "./CreateChannelDialog";
 import BrowseChannelsDialog from "./BrowseChannelsDialog";
 import OnlineUsers from "./OnlineUsers";
+import { usePresence, type PresenceStatus } from "@/hooks/usePresence";
 import {
   Plus, Compass, ChevronDown, ChevronRight,
   Search, Menu, X, Hash, Volume2, Copy, Check, Smartphone,
@@ -54,6 +55,7 @@ export default function Sidebar({
   isDMMode?: boolean;
 }) {
   const pathname = usePathname();
+  const { onlineUsers } = usePresence();
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showBrowseChannels, setShowBrowseChannels] = useState(false);
   const [showDownloadApp, setShowDownloadApp] = useState(false);
@@ -63,6 +65,13 @@ export default function Sidebar({
   const [voiceOpen, setVoiceOpen] = useState(true);
   const [onlineOpen, setOnlineOpen] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  // Helper to get presence status for a user
+  const getUserPresenceStatus = (userId?: string): PresenceStatus => {
+    if (!userId) return "offline";
+    const presenceUser = onlineUsers.find(u => u.userId === userId);
+    return presenceUser?.status || "offline";
+  };
 
   const filtered = channels.filter((c) =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -135,7 +144,7 @@ export default function Sidebar({
                           ) : (
                             <div className="avatar-fallback">{channel.name[0]?.toUpperCase()}</div>
                           )}
-                          <div className={`status-dot ${channel.isOnline ? "online" : "offline"}`} />
+                          <div className={`${getUserPresenceStatus(channel.targetUserId)}-dot`} />
                         </div>
                         <span className="dm-name-wrapper">
                           <span className="dm-name">{channel.name}</span>
@@ -415,13 +424,11 @@ export default function Sidebar({
           display: flex; align-items: center; justify-content: center;
           font-weight: 700; font-family: "Bubblegum Sans", cursive; font-size: 14px;
         }
-        .status-dot {
+        .online-dot, .away-dot, .offline-dot {
           position: absolute; bottom: 0; right: 0;
           width: 10px; height: 10px; border-radius: 50%;
           border: 2px solid var(--bg-secondary);
         }
-        .status-dot.online { background: var(--accent-emerald); }
-        .status-dot.offline { background: var(--text-muted); }
         .dm-name-wrapper {
           display: flex; align-items: center; gap: 6px; flex: 1;
         }

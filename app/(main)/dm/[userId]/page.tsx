@@ -5,7 +5,7 @@ import { useSocket } from "@/hooks/useSocket";
 import MessageList from "@/components/chat/MessageList";
 import MessageInput from "@/components/chat/MessageInput";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import { User, Loader2, Lock, Phone, Video, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
+import { User, Loader2, Lock, Phone, Video, Shield, ShieldAlert, ShieldCheck, ChevronDown } from "lucide-react";
 import { useParams } from "next/navigation";
 import { encryptDM, decryptDM } from "@/lib/dm-encryption-manager";
 import { generateX25519KeyPair } from "@nextalk/crypto";
@@ -24,8 +24,8 @@ export default function DMPage() {
   const { user } = useUser();
   
   const [channelId, setChannelId] = useState<string | null>(null);
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [initializing, setInitializing] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false); // Changed default to false for optimistic loading
+  const [initializing, setInitializing] = useState(false); // Changed default to false - no blocking
   const [myPrivateKey, setMyPrivateKey] = useState<Uint8Array | null>(null);
   const [myPublicKey, setMyPublicKey] = useState<string>("");
   const [theirPublicKey, setTheirPublicKey] = useState<Uint8Array | null>(null);
@@ -36,33 +36,84 @@ export default function DMPage() {
   const [loadingVerification, setLoadingVerification] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [targetUsername, setTargetUsername] = useState("");
+  const [lastReadAt, setLastReadAt] = useState<Date | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [isLoadingFromCache, setIsLoadingFromCache] = useState(true); // Track if we're showing cached data
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasFetchedFreshData = useRef(false); // Prevent duplicate fetches
 
   const { messages, setMessages, typingUsers, isConnected, sendMessage, startTyping, reactToMessage } =
     useSocket(channelId);
 
-  // Check verification status
+  // OPTIMISTIC LOADING: Load cached messages immediately, before crypto or socket
   useEffect(() => {
-    if (!targetUserId) return;
-    
-    setLoadingVerification(true);
-    fetch(`/api/verification?verifiedUserId=${targetUserId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setIsVerified(data.verified || false);
-      })
-      .catch((error) => {
-        console.error("Failed to fetch verification status:", error);
-      })
-      .finally(() => {
-        setLoadingVerification(false);
-      });
-  }, [targetUserId]);
-
-  // Initialize DM, Keys, and Channel
-  useEffect(() => {
-    const initDM = async () => {
+    const loadCachedMessages = async () => {
       if (!user?.id || !targetUserId) return;
-      setInitializing(true);
+      
+      try {
+        // 1. First, get or create the DM channel (lightweight operation)
+        const res = await fetch("/api/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: `dm-${[user.id, targetUserId].sort().join("-")}`,
+            isDM: true,
+            targetUserId,
+          }),
+        });
+
+        if (res.ok) {
+          const channel = await res.json();
+          setChannelId(channel.id);
+          
+          // 2. Immediately try to load from cache (non-blocking)
+          // This happens in parallel with crypto initialization
+          const cacheRes = await fetch(`/api/messages?channelId=${channel.id}&limit=50&cacheOnly=true`);
+          if (cacheRes.ok) {
+            const cacheData = await cacheRes.json();
+            if (cacheData.messages && cacheData.messages.length > 0) {
+              // Show cached messages immediately (may be encrypted)
+              const formattedMessages = cacheData.messages.map((m: any) => ({
+                id: m.id,
+                content: m.content, // Will be decrypted later if encrypted
+                userId: m.user.id,
+                username: m.user.username,
+                imageUrl: m.user.imageUrl || "",
+                channelId: channel.id,
+                fileUrl: m.fileUrl,
+                fileName: m.fileName,
+                fileType: m.fileType,
+                createdAt: m.createdAt,
+                encrypted: m.encrypted || false,
+                user: m.user,
+                reactions: m.reactions?.map((r: any) => ({
+                  emoji: r.emoji,
+                  userId: r.user.id,
+                  username: r.user.username,
+                })) || [],
+                _needsDecryption: m.encrypted || false, // Mark for later decryption
+              }));
+              setMessages(formattedMessages.reverse());
+              setIsLoadingFromCache(false); // We have cached data showing
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load cached DM:", error);
+        setIsLoadingFromCache(false);
+      }
+    };
+
+    loadCachedMessages();
+  }, [user?.id, targetUserId, setMessages]);
+
+  // BACKGROUND INITIALIZATION: Initialize crypto and verification (non-blocking)
+  useEffect(() => {
+    const initCryptoAndVerification = async () => {
+      if (!user?.id || !targetUserId) return;
+      
       setCryptoError("");
 
       try {
@@ -79,8 +130,12 @@ export default function DMPage() {
           body: JSON.stringify({ x25519PublicKey: myPublicKeyBase64 })
         });
 
-        // 3. Fetch target user's public key and username
-        const targetRes = await fetch(`/api/users/${targetUserId}/key`);
+        // 3. Fetch target user's public key and username in parallel with verification
+        const [targetRes, verificationRes] = await Promise.all([
+          fetch(`/api/users/${targetUserId}/key`),
+          fetch(`/api/verification?verifiedUserId=${targetUserId}`)
+        ]);
+
         if (targetRes.ok) {
           const targetData = await targetRes.json();
           setTargetUsername(targetData.username || "User");
@@ -92,40 +147,74 @@ export default function DMPage() {
           }
         }
 
-        // 4. Create/get DM channel
-        const res = await fetch("/api/channels", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: `dm-${[user.id, targetUserId].sort().join("-")}`,
-            isDM: true,
-            targetUserId,
-          }),
-        });
-
-        if (res.ok) {
-          const channel = await res.json();
-          setChannelId(channel.id);
+        if (verificationRes.ok) {
+          const verificationData = await verificationRes.json();
+          setIsVerified(verificationData.verified || false);
         }
       } catch (error: any) {
-        console.error("Failed to init DM or Crypto:", error);
+        console.error("Failed to init crypto:", error);
         setCryptoError(error.message || "Failed to initialize secure connection.");
-      } finally {
-        setInitializing(false);
       }
     };
 
-    initDM();
+    initCryptoAndVerification();
   }, [user?.id, targetUserId]);
 
-  // Fetch and decrypt message history
+  // BACKGROUND DECRYPTION & FRESH DATA: Decrypt cached messages and fetch fresh data
   useEffect(() => {
-    if (!channelId || !myPrivateKey || !user?.id) return;
+    if (!channelId || !user?.id || hasFetchedFreshData.current) return;
 
-    setLoadingHistory(true);
-    fetch(`/api/messages?channelId=${channelId}&limit=50`)
-      .then((r) => r.json())
-      .then(async (data) => {
+    const decryptAndRefresh = async () => {
+      // If we have keys, decrypt any cached messages that need it
+      if (myPrivateKey && theirPublicKey) {
+        setMessages(prev => prev.map(m => {
+          // @ts-ignore - _needsDecryption is our custom flag
+          if (m._needsDecryption && m.encrypted) {
+            // Decrypt in background without blocking UI
+            (async () => {
+              try {
+                const encryptedMessage = {
+                  // @ts-ignore - encrypted messages have these fields
+                  ciphertext: m.content,
+                  iv: m.iv || '',
+                  salt: m.salt || '',
+                  keyVersion: m.keyVersion || 1,
+                };
+                const decrypted = await decryptDM(
+                  encryptedMessage,
+                  user.id,
+                  targetUserId,
+                  myPrivateKey,
+                  theirPublicKey
+                );
+                
+                // Update this specific message with decrypted content
+                setMessages(current => current.map(msg => 
+                  msg.id === m.id ? { ...msg, content: decrypted, _needsDecryption: false } : msg
+                ));
+              } catch (err) {
+                console.error("Failed to decrypt cached message:", err);
+                setMessages(current => current.map(msg => 
+                  msg.id === m.id ? { ...msg, content: "[Unable to decrypt]", _needsDecryption: false } : msg
+                ));
+              }
+            })();
+          }
+          return m;
+        }));
+      }
+
+      // Fetch fresh data from database (non-blocking, in background)
+      try {
+        setLoadingHistory(true);
+        const response = await fetch(`/api/messages?channelId=${channelId}&limit=50`);
+        if (!response.ok) {
+          setLoadingHistory(false);
+          return;
+        }
+
+        const data = await response.json();
+        
         // Decrypt messages in parallel
         const decryptedMessages = await Promise.all(
           data.messages.map(async (m: any) => {
@@ -175,11 +264,126 @@ export default function DMPage() {
           })
         );
         
-        setMessages(decryptedMessages.reverse()); // Ensure chronological
-      })
-      .catch(console.error)
-      .finally(() => setLoadingHistory(false));
+        // Replace cached messages with fresh data
+        setMessages(decryptedMessages.reverse());
+        setIsLoadingFromCache(false);
+        hasFetchedFreshData.current = true;
+      } catch (error) {
+        console.error("Failed to fetch fresh messages:", error);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    decryptAndRefresh();
   }, [channelId, myPrivateKey, theirPublicKey, user?.id, targetUserId, setMessages]);
+  
+  // Fetch last read position
+  useEffect(() => {
+    if (!channelId) return;
+    
+    fetch(`/api/channels/${channelId}/last-read`)
+      .then((r) => {
+        if (!r.ok) return;
+        return r.json();
+      })
+      .then((data) => {
+        if (data?.lastReadAt) {
+          setLastReadAt(new Date(data.lastReadAt));
+        }
+      })
+      .catch(console.error);
+  }, [channelId]);
+  
+  // Calculate unread count
+  useEffect(() => {
+    if (!lastReadAt || messages.length === 0) {
+      setUnreadCount(0);
+      return;
+    }
+    
+    const lastReadTime = new Date(lastReadAt).getTime();
+    const unread = messages.filter((msg) => {
+      const msgTime = new Date(msg.createdAt).getTime();
+      return msgTime > lastReadTime;
+    }).length;
+    
+    setUnreadCount(unread);
+  }, [messages, lastReadAt]);
+  
+  // Mark messages as read when user is at the bottom
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !channelId) return;
+    
+    const checkAndMarkAsRead = () => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      
+      // If user is near the bottom (within 100px), mark as read after 1 second
+      if (distanceFromBottom < 100 && messages.length > 0) {
+        if (markAsReadTimeoutRef.current) {
+          clearTimeout(markAsReadTimeoutRef.current);
+        }
+        
+        markAsReadTimeoutRef.current = setTimeout(() => {
+          fetch(`/api/channels/${channelId}/read`, {
+            method: "PATCH",
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.lastReadAt) {
+                setLastReadAt(new Date(data.lastReadAt));
+              }
+            })
+            .catch(console.error);
+        }, 1000);
+      } else {
+        // Clear timeout if user scrolled up
+        if (markAsReadTimeoutRef.current) {
+          clearTimeout(markAsReadTimeoutRef.current);
+          markAsReadTimeoutRef.current = null;
+        }
+      }
+    };
+    
+    container.addEventListener("scroll", checkAndMarkAsRead);
+    // Check immediately on mount
+    checkAndMarkAsRead();
+    
+    return () => {
+      container.removeEventListener("scroll", checkAndMarkAsRead);
+      if (markAsReadTimeoutRef.current) {
+        clearTimeout(markAsReadTimeoutRef.current);
+      }
+    };
+  }, [channelId, messages]);
+  
+  // Track scroll position for jump button
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      setShowScrollBtn(distanceFromBottom > 200);
+    };
+    
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+  
+  const scrollToBottom = () => {
+    scrollContainerRef.current?.scrollTo({
+      top: scrollContainerRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  };
 
   const handleSend = async (content: string, fileUrl?: string, fileName?: string, fileType?: string) => {
     if (!channelId || !user?.id) return;
@@ -292,14 +496,33 @@ export default function DMPage() {
       </header>
 
       {/* Messages */}
-      <div className="dm-body">
-        {loadingHistory ? (
-          <div className="loading-state">
-            <Loader2 size={32} className="spin text-gold" />
-            <p>Loading messages...</p>
+      <div className="dm-body" ref={scrollContainerRef}>
+        {messages.length === 0 && !isLoadingFromCache ? (
+          <div className="empty-state">
+            <div className="empty-icon">💬</div>
+            <p className="empty-title">No messages yet</p>
+            <p className="empty-subtitle">Start the conversation!</p>
           </div>
         ) : (
-          <MessageList messages={messages} currentUserId={user?.id || ""} onReact={reactToMessage} />
+          <>
+            <MessageList messages={messages} currentUserId={user?.id || ""} lastReadAt={lastReadAt} onReact={reactToMessage} />
+            
+            {showScrollBtn && (
+              <button className="scroll-btn animate-scale-in" onClick={scrollToBottom}>
+                <ChevronDown size={16} />
+                {unreadCount > 0 && (
+                  <span className="scroll-btn-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                )}
+              </button>
+            )}
+            
+            {/* Show subtle loading indicator in header when fetching fresh data */}
+            {loadingHistory && (
+              <div className="refresh-indicator" title="Syncing messages...">
+                <Loader2 size={12} className="spin" />
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -409,10 +632,114 @@ export default function DMPage() {
 
         .connection-status { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--text-tertiary); }
         
-        .dm-body { flex:1; display:flex; overflow:hidden; position:relative; }
+        .dm-body { flex:1; display:flex; overflow-y:auto; overflow-x:hidden; position:relative; }
         
-        .loading-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-tertiary); }
-        .text-gold { color: var(--accent-gold); }
+        .empty-state {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 48px 24px;
+          text-align: center;
+          color: var(--text-tertiary);
+        }
+        
+        .empty-icon {
+          font-size: 64px;
+          margin-bottom: 16px;
+          opacity: 0.5;
+          filter: grayscale(0.3);
+        }
+        
+        .empty-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          margin-bottom: 4px;
+        }
+        
+        .empty-subtitle {
+          font-size: 14px;
+          color: var(--text-tertiary);
+        }
+        
+        .refresh-indicator {
+          position: fixed;
+          top: 70px;
+          right: 24px;
+          padding: 8px 12px;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-primary);
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: var(--text-tertiary);
+          box-shadow: var(--shadow-sm);
+          z-index: 10;
+          pointer-events: none;
+          animation: fadeIn 0.2s ease;
+        }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .scroll-btn {
+          position: sticky;
+          bottom: 12px;
+          align-self: center;
+          width: 34px;
+          height: 34px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--bg-elevated);
+          border: 1px solid var(--border-primary);
+          border-radius: 50%;
+          color: var(--text-secondary);
+          cursor: pointer;
+          box-shadow: var(--shadow-md);
+          transition: all 0.2s ease;
+          z-index: 5;
+        }
+
+        .scroll-btn:hover {
+          background: var(--accent-gold-dim);
+          color: var(--accent-gold);
+          border-color: rgba(197, 165, 90, 0.2);
+        }
+        
+        .scroll-btn-badge {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 5px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--accent-rose);
+          color: white;
+          font-size: 10px;
+          font-weight: 700;
+          border-radius: 999px;
+          border: 2px solid var(--bg-secondary);
+          box-shadow: 0 2px 8px rgba(224, 107, 122, 0.3);
+        }
       `}</style>
     </div>
   );

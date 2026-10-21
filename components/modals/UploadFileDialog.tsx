@@ -9,27 +9,42 @@ import {
   ImageIcon,
   Paperclip,
 } from "lucide-react";
+import {
+  optimizeImage,
+  isImageFile,
+  formatFileSize as formatSize,
+  calculateCompressionRatio,
+  type OptimizedImage,
+} from "@/lib/image-optimization";
 
 /**
  * UploadFileDialog — Dedicated upload modal with drag-and-drop,
- * file preview, and Cloudinary upload integration.
+ * file preview, blurhash generation, and Cloudinary upload integration.
  */
 export default function UploadFileDialog({
   onClose,
   onUpload,
 }: {
   onClose: () => void;
-  onUpload: (fileUrl: string, fileName: string, fileType: string) => void;
+  onUpload: (
+    fileUrl: string,
+    fileName: string,
+    fileType: string,
+    blurhash?: string,
+    dimensions?: { width: number; height: number }
+  ) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [optimizedImage, setOptimizedImage] = useState<OptimizedImage | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = useCallback((selectedFile: File) => {
+  const handleFileSelect = useCallback(async (selectedFile: File) => {
     if (selectedFile.size > 10 * 1024 * 1024) {
       setError("File size must be under 10MB");
       return;
@@ -37,11 +52,25 @@ export default function UploadFileDialog({
 
     setError("");
     setFile(selectedFile);
+    setOptimizedImage(null);
 
-    if (selectedFile.type.startsWith("image/")) {
+    if (isImageFile(selectedFile)) {
+      // Generate preview
       const reader = new FileReader();
       reader.onload = (e) => setFilePreview(e.target?.result as string);
       reader.readAsDataURL(selectedFile);
+
+      // Optimize image in background
+      setOptimizing(true);
+      try {
+        const optimized = await optimizeImage(selectedFile);
+        setOptimizedImage(optimized);
+      } catch (err) {
+        console.error("Image optimization error:", err);
+        // Continue without optimization if it fails
+      } finally {
+        setOptimizing(false);
+      }
     } else {
       setFilePreview(null);
     }
@@ -84,8 +113,11 @@ export default function UploadFileDialog({
 
       setUploadProgress(30);
 
+      // Use optimized file if available (for images), otherwise use original
+      const fileToUpload = optimizedImage?.file || file;
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", fileToUpload);
       formData.append("timestamp", params.timestamp.toString());
       formData.append("signature", params.signature);
       formData.append("api_key", params.apiKey);
@@ -103,7 +135,14 @@ export default function UploadFileDialog({
       const data = await uploadRes.json();
       setUploadProgress(100);
 
-      onUpload(data.secure_url, file.name, file.type);
+      // Pass blurhash and dimensions if available
+      onUpload(
+        data.secure_url,
+        file.name,
+        file.type,
+        optimizedImage?.blurhash,
+        optimizedImage ? { width: optimizedImage.width, height: optimizedImage.height } : undefined
+      );
       onClose();
     } catch (err) {
       setError("Upload failed. Please try again.");
@@ -117,20 +156,19 @@ export default function UploadFileDialog({
   const removeFile = () => {
     setFile(null);
     setFilePreview(null);
+    setOptimizedImage(null);
     setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const getFileIcon = () => {
     if (!file) return <Upload size={32} />;
-    if (file.type.startsWith("image/")) return <ImageIcon size={32} />;
+    if (isImageFile(file)) return <ImageIcon size={32} />;
     return <FileText size={32} />;
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return formatSize(bytes);
   };
 
   return (
@@ -172,7 +210,25 @@ export default function UploadFileDialog({
               )}
               <div className="file-details">
                 <span className="file-name">{file.name}</span>
-                <span className="file-size">{formatFileSize(file.size)}</span>
+                <span className="file-size">
+                  {formatFileSize(file.size)}
+                  {optimizedImage && (
+                    <span className="compression-info">
+                      {" "}→ {formatFileSize(optimizedImage.compressedSize)}{" "}
+                      ({calculateCompressionRatio(optimizedImage.originalSize, optimizedImage.compressedSize)}% smaller)
+                    </span>
+                  )}
+                </span>
+                {optimizing && (
+                  <span className="optimizing-text">
+                    <Loader2 size={12} className="spin" /> Optimizing...
+                  </span>
+                )}
+                {optimizedImage && (
+                  <span className="optimized-text">
+                    ✓ Optimized • {optimizedImage.width}×{optimizedImage.height}
+                  </span>
+                )}
               </div>
               <button className="remove-btn" onClick={removeFile}>
                 <X size={14} />
@@ -365,6 +421,40 @@ export default function UploadFileDialog({
           font-size: 12px;
           color: var(--text-tertiary);
           margin-top: 2px;
+        }
+
+        .compression-info {
+          color: var(--accent-emerald);
+          font-weight: 500;
+        }
+
+        .optimizing-text {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          color: var(--accent-gold);
+          margin-top: 4px;
+        }
+
+        .optimizing-text :global(.spin) {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .optimized-text {
+          display: block;
+          font-size: 11px;
+          color: var(--accent-emerald);
+          margin-top: 4px;
         }
 
         .remove-btn {

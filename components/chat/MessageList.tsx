@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import Image from "next/image";
 import { formatRelativeTime, getInitials } from "@/lib/utils";
@@ -20,6 +20,7 @@ import {
 import MessageContextMenu from "./MessageContextMenu";
 import UserContextMenu from "./UserContextMenu";
 import UserProfilePopover from "./UserProfilePopover";
+import { ImageWithBlurhash, ImageLightbox } from "./ImageWithBlurhash";
 
 interface Message {
   id?: string;
@@ -32,6 +33,8 @@ interface Message {
   fileUrl?: string | null;
   fileName?: string | null;
   fileType?: string | null;
+  blurhash?: string | null;
+  imageDimensions?: { width: number; height: number } | null;
   createdAt: string;
   encrypted?: boolean;
   user?: {
@@ -82,6 +85,7 @@ function formatDateSeparator(dateStr: string): string {
 export default function MessageList({
   messages,
   currentUserId,
+  lastReadAt,
   onReact,
   onReply,
   onEdit,
@@ -100,6 +104,7 @@ export default function MessageList({
 }: {
   messages: Message[];
   currentUserId: string;
+  lastReadAt?: Date | string | null;
   onReact: (messageId: string, emoji: string) => void;
   onReply?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
@@ -120,6 +125,16 @@ export default function MessageList({
   const topObserverRef = useRef<HTMLDivElement>(null);
   const previousScrollHeightRef = useRef<number>(0);
   const wasAtBottomRef = useRef<boolean>(true);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
+  
+  // Calculate the index where the unread marker should appear
+  const unreadMarkerIndex = lastReadAt
+    ? messages.findIndex((msg) => {
+        const msgTime = new Date(msg.createdAt).getTime();
+        const lastReadTime = new Date(lastReadAt).getTime();
+        return msgTime > lastReadTime;
+      })
+    : -1;
 
   // Virtualization setup with overscan for smooth scrolling
   const virtualizer = useVirtualizer({
@@ -306,6 +321,9 @@ export default function MessageList({
             const currentDate = new Date(msg.createdAt).toDateString();
             const prevDate = prevMsg ? new Date(prevMsg.createdAt).toDateString() : null;
             const showDateSeparator = !prevMsg || currentDate !== prevDate;
+            
+            // Unread marker logic: show before this message if it's the first unread
+            const showUnreadMarker = index === unreadMarkerIndex && unreadMarkerIndex > 0;
 
             // Group reactions by emoji
             const groupedReactions = (msg.reactions || []).reduce(
@@ -334,6 +352,15 @@ export default function MessageList({
                     <div className="date-line" />
                     <span className="date-label">{formatDateSeparator(msg.createdAt)}</span>
                     <div className="date-line" />
+                  </div>
+                )}
+                
+                {/* Unread Marker */}
+                {showUnreadMarker && (
+                  <div className="unread-marker">
+                    <div className="unread-line" />
+                    <span className="unread-label">New Messages</span>
+                    <div className="unread-line" />
                   </div>
                 )}
 
@@ -436,16 +463,19 @@ export default function MessageList({
                     {msg.fileUrl && (
                       <div className="message-attachment">
                         {isImageFile(msg.fileType) ? (
-                          <div className="attachment-image">
-                            <Image
-                              src={msg.fileUrl}
-                              alt={msg.fileName || "Image"}
-                              width={400}
-                              height={300}
-                              className="attachment-img"
-                              style={{ objectFit: "contain" }}
-                            />
-                          </div>
+                          <ImageWithBlurhash
+                            src={msg.fileUrl}
+                            alt={msg.fileName || "Image"}
+                            blurhash={msg.blurhash || undefined}
+                            width={msg.imageDimensions?.width || 400}
+                            height={msg.imageDimensions?.height || 300}
+                            onClick={() =>
+                              setLightboxImage({
+                                src: msg.fileUrl!,
+                                alt: msg.fileName || "Image",
+                              })
+                            }
+                          />
                         ) : (
                           <a
                             href={msg.fileUrl}
@@ -522,6 +552,15 @@ export default function MessageList({
         </div>
       )}
 
+      {/* Lightbox */}
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
+
       <style jsx>{`
         .message-list {
           flex: 1;
@@ -557,6 +596,45 @@ export default function MessageList({
           background: var(--bg-tertiary);
           border: 1px solid var(--border-primary);
           border-radius: 999px;
+        }
+        
+        /* Unread marker */
+        .unread-marker {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin: 16px 0 12px;
+          padding: 0 6px;
+        }
+        
+        .unread-line {
+          flex: 1;
+          height: 2px;
+          background: linear-gradient(90deg, transparent, var(--accent-rose), transparent);
+          animation: glow-pulse 2s ease-in-out infinite;
+        }
+        
+        .unread-label {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: var(--accent-rose);
+          white-space: nowrap;
+          padding: 5px 16px;
+          background: rgba(224, 107, 122, 0.08);
+          border: 1px solid rgba(224, 107, 122, 0.25);
+          border-radius: 999px;
+          box-shadow: 0 0 10px rgba(224, 107, 122, 0.2);
+        }
+        
+        @keyframes glow-pulse {
+          0%, 100% {
+            opacity: 0.6;
+          }
+          50% {
+            opacity: 1;
+          }
         }
 
         /* Empty state */
@@ -720,25 +798,6 @@ export default function MessageList({
           margin-top: 8px;
         }
 
-        .attachment-image {
-          border-radius: var(--radius);
-          overflow: hidden;
-          max-width: 400px;
-          border: 1px solid var(--border-primary);
-          box-shadow: var(--shadow-sm);
-          transition: box-shadow 0.2s ease;
-        }
-
-        .attachment-image:hover {
-          box-shadow: var(--shadow-md);
-        }
-
-        .attachment-image :global(.attachment-img) {
-          border-radius: var(--radius);
-          max-height: 300px;
-          width: auto;
-        }
-
         .attachment-file {
           display: inline-flex;
           align-items: center;
@@ -845,10 +904,6 @@ export default function MessageList({
 
           .message-actions {
             display: none !important;
-          }
-
-          .attachment-image {
-            max-width: 100%;
           }
         }
       `}</style>

@@ -10,6 +10,11 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import {
+  optimizeImage,
+  isImageFile,
+  type OptimizedImage,
+} from "@/lib/image-optimization";
 
 /**
  * MessageInput — Premium chat input bar with file upload, image picker,
@@ -25,7 +30,9 @@ export default function MessageInput({
     content: string,
     fileUrl?: string,
     fileName?: string,
-    fileType?: string
+    fileType?: string,
+    blurhash?: string,
+    imageDimensions?: { width: number; height: number }
   ) => void;
   onTyping: () => void;
   disabled?: boolean;
@@ -34,6 +41,8 @@ export default function MessageInput({
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [optimizedImage, setOptimizedImage] = useState<OptimizedImage | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -105,19 +114,34 @@ export default function MessageInput({
     let fileUrl: string | undefined;
     let fileName: string | undefined;
     let fileType: string | undefined;
+    let blurhash: string | undefined;
+    let imageDimensions: { width: number; height: number } | undefined;
 
     if (file) {
-      const result = await uploadToCloudinary(file);
+      // Use optimized file if available (for images), otherwise use original
+      const fileToUpload = optimizedImage?.file || file;
+      const result = await uploadToCloudinary(fileToUpload);
       if (result) {
         fileUrl = result.url;
         fileName = file.name;
         fileType = file.type;
+        
+        // Include blurhash and dimensions if image was optimized
+        if (optimizedImage) {
+          blurhash = optimizedImage.blurhash;
+          imageDimensions = {
+            width: optimizedImage.width,
+            height: optimizedImage.height,
+          };
+        }
       }
     }
 
-    onSend(content.trim(), fileUrl, fileName, fileType);
+    onSend(content.trim(), fileUrl, fileName, fileType, blurhash, imageDimensions);
     setContent("");
     setFile(null);
+    setFilePreview(null);
+    setOptimizedImage(null);
     setFilePreview(null);
     textareaRef.current?.focus();
   };
@@ -129,7 +153,7 @@ export default function MessageInput({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
@@ -140,11 +164,24 @@ export default function MessageInput({
     }
 
     setFile(selectedFile);
+    setOptimizedImage(null);
 
-    if (selectedFile.type.startsWith("image/")) {
+    if (isImageFile(selectedFile)) {
       const reader = new FileReader();
       reader.onload = (e) => setFilePreview(e.target?.result as string);
       reader.readAsDataURL(selectedFile);
+
+      // Optimize image in background
+      setOptimizing(true);
+      try {
+        const optimized = await optimizeImage(selectedFile);
+        setOptimizedImage(optimized);
+      } catch (err) {
+        console.error("Image optimization error:", err);
+        // Continue without optimization if it fails
+      } finally {
+        setOptimizing(false);
+      }
     } else {
       setFilePreview(null);
     }

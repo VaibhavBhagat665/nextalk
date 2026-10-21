@@ -453,6 +453,14 @@ body {
   animation: pulse-glow 2.5s ease-in-out infinite;
 }
 
+.away-dot {
+  width: 9px;
+  height: 9px;
+  background-color: var(--accent-amber);
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+}
+
 .offline-dot {
   width: 9px;
   height: 9px;

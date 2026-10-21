@@ -36,9 +36,25 @@ model User {
   ownedServers    Server[]       @relation("ServerOwner")
   serverMembers   ServerMember[]
   voiceStates     VoiceState[]
+  pushTokens      PushToken[]
 
   @@index([clerkId])
   @@index([username])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   // "ios" | "android" | "web"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
 }
 
 model Server {
@@ -290,4 +306,19 @@ model KeyVerification {
   @@unique([userId, verifiedUserId])
   @@index([userId])
   @@index([conversationId])
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   // "ios" | "android" | "web"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
 }
