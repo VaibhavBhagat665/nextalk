@@ -14,12 +14,12 @@
  */
 
 // Re-export all utilities from submodules
-export * from './types.js';
-export * from './key-generation.js';
-export * from './key-derivation.js';
-export * from './key-storage.js';
-export * from './api-client.js';
-export * from './encryption.js';
-export * from './utils.js';
-export * from './session-key-manager.js';
-export * from './fingerprint.js';
+export * from './types';
+export * from './key-generation';
+export * from './key-derivation';
+export * from './key-storage';
+export * from './api-client';
+export * from './encryption';
+export * from './utils';
+export * from './session-key-manager';
+export * from './fingerprint';
