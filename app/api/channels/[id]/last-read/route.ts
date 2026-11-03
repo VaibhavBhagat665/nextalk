@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { userId } = await auth();
@@ -16,7 +16,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const channelId = params.id;
+    const { id: channelId } = await params;
 
     // Find the user's membership in this channel
     const user = await prisma.user.findUnique({
