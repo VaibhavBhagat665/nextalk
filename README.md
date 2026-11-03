@@ -81,7 +81,7 @@ Smart chat summaries and action items, powered by Llama 3.1 through Groq.
 <td width="50%" valign="top">
 
 ### 📹 Video & Voice Calls
-WebRTC HD calls with screen sharing and mute controls, with STUN/TURN support for tricky networks.
+HD video/voice via mediasoup SFU (Selective Forwarding Unit) with screen sharing, mute controls, and TURN fallback for restrictive networks.
 
 </td>
 <td width="50%" valign="top">
@@ -128,45 +128,52 @@ React Native (Expo) companion app that shares the same backend as the web app.
 | Layer | Technology |
 |:------|:-----------|
 | **Frontend** | Next.js 16 (App Router + Turbopack), React 19, TailwindCSS v4 |
-| **Backend** | Next.js API Routes, Express + Socket.io |
-| **Database** | PostgreSQL (Supabase) via Prisma ORM |
+| **Backend** | Next.js API Routes, Express + Socket.io (always-on server) |
+| **Database** | PostgreSQL (Railway/Supabase) via Prisma ORM with connection pooling |
 | **Auth** | Clerk (SSO, OAuth, session management) |
 | **Real-time** | Socket.io with Redis adapter (Upstash) |
 | **AI** | Groq SDK (Llama 3.1) for chat summarization |
 | **Storage** | Cloudinary (images, files, documents) |
 | **State** | Zustand + TanStack React Query |
-| **Calling** | WebRTC (mesh topology) with STUN/TURN support |
+| **Calling** | mediasoup SFU (WebRTC) with STUN/TURN support |
 | **Mobile** | Expo SDK 53 + React Native with Expo Router |
 
 <br />
 
 ## 🏗️ Architecture
 
+> **Important**: The web app is deployed on **Vercel** (serverless), but Socket.io and mediasoup **require an always-on server** (Railway/Fly.io/VPS) with UDP support. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the complete deployment topology.
+
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Clients
         W[Web App<br/>Next.js]
         M[Mobile App<br/>Expo]
     end
 
-    subgraph Backend
+    subgraph "Vercel (Serverless)"
         API[Next.js API Routes]
+    end
+    
+    subgraph "Always-On Server"
         WS[Socket.io Server]
+        SFU[mediasoup SFU<br/>UDP 10000-10100]
     end
 
     subgraph Services
-        DB[(PostgreSQL<br/>Supabase)]
+        DB[(PostgreSQL<br/>Pooled)]
         R[(Redis<br/>Upstash)]
         C[Clerk Auth]
         G[Groq<br/>Llama 3.1]
         CL[Cloudinary]
     end
 
-    W <--> API
-    M <--> API
-    W <--> WS
-    M <--> WS
-    W <-. WebRTC .-> W
+    W -->|HTTPS| API
+    M -->|HTTPS| API
+    W <-->|WSS| WS
+    M <-->|WSS| WS
+    W <-.WebRTC UDP.-> SFU
+    M <-.WebRTC UDP.-> SFU
 
     API --> DB
     API --> G
@@ -174,9 +181,17 @@ flowchart LR
     API --> C
     WS --> R
     WS --> DB
+    SFU -.part of.-> WS
 ```
 
-**How a message flows:** the sender's client emits it over Socket.io, the server saves it through Prisma, and Redis fans it out to every connected instance, so recipients get it instantly regardless of which server they're on. DMs are encrypted client-side first, so the server only ever stores ciphertext.
+**Key points:**
+- **Vercel**: Hosts the Next.js web app (static + serverless functions)
+- **Always-On Server**: Hosts Socket.io + mediasoup SFU (Railway/Fly.io/VPS with public IP)
+- **Messages flow**: Client → Socket.io → DB → Redis pub/sub → All clients
+- **DMs**: Encrypted client-side with AES-256-GCM; server stores ciphertext only
+- **Voice/Video**: mediasoup SFU architecture (not peer-to-peer mesh) for scalability
+
+For detailed architecture, data flows, security model, and deployment guide, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 <br />
 
@@ -185,7 +200,7 @@ flowchart LR
 ### Prerequisites
 
 - Node.js 18+
-- A PostgreSQL database ([Supabase](https://supabase.com))
+- A PostgreSQL database ([Railway](https://railway.app) or [Supabase](https://supabase.com))
 - A [Clerk](https://clerk.com) account
 - An [Upstash Redis](https://upstash.com) database
 - A [Cloudinary](https://cloudinary.com) account
@@ -220,12 +235,14 @@ Copy `.env.example` to `.env.local` and fill in each service. The exact variable
 
 | Service | What you need |
 |:--------|:--------------|
-| **Database** | PostgreSQL connection string from Supabase |
+| **Database** | PostgreSQL connection string from Railway or Supabase (use **pooled** connection for serverless) |
 | **Clerk** | Publishable key and secret key |
-| **Redis** | Upstash REST URL and token |
+| **Redis** | Upstash REST URL and token (use **TLS** endpoint: `rediss://`) |
 | **Groq** | API key |
 | **Cloudinary** | Cloud name, API key, API secret |
-| **WebRTC** *(optional)* | TURN server credentials for restrictive networks |
+| **Socket Server** | URL of your always-on Socket.io server (e.g., `https://socket.example.com`) |
+| **mediasoup** | Public IP address for `MEDIASOUP_ANNOUNCED_IP` (required for production voice/video) |
+| **TURN Server** *(optional)* | TURN server credentials for restrictive NAT traversal (coturn, Twilio, or Cloudflare Calls) |
 
 > **Never commit `.env.local`.** It's already in `.gitignore`.
 

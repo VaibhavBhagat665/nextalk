@@ -70,9 +70,16 @@ export default function ChannelList({
 
   return (
     <>
-      {contextMenu && <div className="context-backdrop" onClick={closeContextMenu} />}
+      {/* Context menu backdrop */}
+      {contextMenu && (
+        <div 
+          className="fixed inset-0 z-[90]" 
+          onClick={closeContextMenu} 
+        />
+      )}
 
-      <nav className="channel-list">
+      {/* Channel list */}
+      <nav className="flex flex-col gap-[3px] px-2">
         {channels.map((channel, index) => {
           const isActive = currentPath === `/channel/${channel.id}`;
           const Icon = isVoice ? Volume2 : getChannelIcon(channel.icon);
@@ -82,218 +89,181 @@ export default function ChannelList({
           const mentionCount = channel.mentionCount || 0;
 
           return (
-            <div key={channel.id} className="channel-item-wrap" onContextMenu={(e) => handleContextMenu(e, channel.id)}>
+            <div 
+              key={channel.id} 
+              className="relative group" 
+              onContextMenu={(e) => handleContextMenu(e, channel.id)}
+            >
               <Link
                 href={href}
-                className={`channel-item ${isActive ? "channel-item--active" : ""} ${leaving === channel.id ? "channel-item--leaving" : ""} ${isVoice ? "channel-item--voice" : ""}`}
                 id={`channel-${channel.id}`}
                 style={{ animationDelay: `${index * 40}ms` }}
+                className={`
+                  flex items-center gap-2.5 px-3 py-2.5 rounded-[10px]
+                  cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.25,0.1,0.25,1)]
+                  no-underline relative
+                  bg-white/[0.02] border border-white/[0.03]
+                  animate-[fadeIn_0.35s_cubic-bezier(0.25,0.1,0.25,1)_backwards]
+                  ${isActive 
+                    ? 'bg-purple-500/[0.08] text-[var(--text-primary)] border-purple-500/[0.15] shadow-[0_0_12px_rgba(168,85,247,0.06)]' 
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] hover:border-purple-500/[0.08] hover:translate-x-[2px]'
+                  }
+                  ${leaving === channel.id ? 'opacity-40 pointer-events-none' : ''}
+                  ${isVoice ? 'border-cyan-500/[0.05] hover:bg-cyan-500/[0.06] hover:border-cyan-500/[0.12]' : ''}
+                `}
               >
-                {isActive && <div className="active-indicator" />}
-                <div className={`channel-icon ${isActive ? "channel-icon--active" : ""} ${isVoice ? "channel-icon--voice" : ""}`}>
+                {/* Active indicator */}
+                {isActive && (
+                  <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-[3px] h-[22px] bg-[var(--gradient-primary)] rounded-r-[4px] shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
+                )}
+
+                {/* Channel icon */}
+                <div className={`
+                  w-[30px] h-[30px] flex items-center justify-center
+                  rounded-[10px] text-sm flex-shrink-0 transition-all duration-200
+                  ${isActive 
+                    ? 'bg-[var(--accent-gold-dim)] text-[var(--accent-gold)] shadow-[0_0_12px_rgba(168,85,247,0.15)]' 
+                    : isVoice 
+                      ? 'bg-cyan-500/[0.08] text-[var(--accent-cyan)]' 
+                      : 'bg-purple-500/[0.08] text-[var(--text-muted)]'
+                  }
+                `}>
                   {channel.isPrivate ? <Lock size={15} /> : <Icon size={15} />}
                 </div>
-                <div className="channel-info">
-                  <span className="channel-name">{channel.name}</span>
+
+                {/* Channel info */}
+                <div className="flex-1 min-w-0">
+                  <span className="block text-sm font-semibold overflow-hidden text-ellipsis whitespace-nowrap">
+                    {channel.name}
+                  </span>
                   {!isVoice && channel.lastMessage && (
-                    <span className="channel-preview">
+                    <span className="block text-xs text-[var(--text-muted)] overflow-hidden text-ellipsis whitespace-nowrap mt-0.5">
                       {channel.lastMessage.content.length > 30
                         ? channel.lastMessage.content.slice(0, 30) + "..."
                         : channel.lastMessage.content}
                     </span>
                   )}
                   {isVoice && voiceUsers.length > 0 && (
-                    <span className="voice-count">{voiceUsers.length} connected</span>
+                    <span className="block text-[11px] text-[var(--accent-cyan)] font-bold mt-0.5">
+                      {voiceUsers.length} connected
+                    </span>
                   )}
                 </div>
+
                 {/* Unread & Mention Badges */}
                 {!isActive && (
-                  <div className="channel-badges">
+                  <div className="flex items-center gap-1 mr-1">
                     {mentionCount > 0 && (
-                      <div className="mention-badge">{mentionCount > 99 ? "99+" : mentionCount}</div>
+                      <div className="min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full animate-[pulse_2s_ease-in-out_infinite]">
+                        {mentionCount > 99 ? "99+" : mentionCount}
+                      </div>
                     )}
                     {unreadCount > 0 && mentionCount === 0 && (
-                      <div className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</div>
+                      <div className="min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-[var(--text-muted)] text-[var(--bg-secondary)] text-[10px] font-bold rounded-full">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </div>
                     )}
                   </div>
                 )}
+
+                {/* Timestamp */}
                 {!isVoice && channel.lastMessage && (
-                  <span className="channel-time">{formatRelativeTime(channel.lastMessage.createdAt)}</span>
+                  <span className="text-[10px] text-[var(--text-muted)] flex-shrink-0 font-medium">
+                    {formatRelativeTime(channel.lastMessage.createdAt)}
+                  </span>
                 )}
               </Link>
 
               {/* Voice users avatars */}
               {isVoice && voiceUsers.length > 0 && (
-                <div className="voice-users">
+                <div className="flex gap-1 px-[14px] py-1 pl-[52px] flex-wrap">
                   {voiceUsers.map((u) => (
-                    <div key={u.id} className="voice-user" data-tooltip={u.username}>
+                    <div key={u.id} className="relative w-[22px] h-[22px]" data-tooltip={u.username}>
                       {u.imageUrl ? (
-                        <img src={u.imageUrl} alt={u.username} className="voice-user-avatar" />
+                        <img 
+                          src={u.imageUrl} 
+                          alt={u.username} 
+                          className="w-[22px] h-[22px] rounded-full object-cover border-2 border-[var(--accent-cyan)]" 
+                        />
                       ) : (
-                        <div className="voice-user-fallback">{u.username[0].toUpperCase()}</div>
+                        <div className="w-[22px] h-[22px] rounded-full bg-[var(--gradient-primary)] flex items-center justify-center text-[9px] font-bold text-white">
+                          {u.username[0].toUpperCase()}
+                        </div>
                       )}
-                      {u.muted && <div className="voice-muted-dot" />}
+                      {u.muted && (
+                        <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[var(--accent-rose)] rounded-full border-[1.5px] border-[var(--bg-secondary)]" />
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
-              <button className="channel-more" onClick={(e) => handleContextMenu(e, channel.id)} id={`channel-more-${channel.id}`}>
+              {/* More button */}
+              <button 
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-none border-none text-[var(--text-muted)] p-1 rounded-lg cursor-pointer opacity-0 group-hover:opacity-100 hover:bg-[var(--bg-active)] hover:text-[var(--text-primary)] transition-all duration-200 z-[2] flex items-center justify-center"
+                onClick={(e) => handleContextMenu(e, channel.id)} 
+                id={`channel-more-${channel.id}`}
+              >
                 <MoreVertical size={14} />
               </button>
             </div>
           );
         })}
 
+        {/* Empty state */}
         {channels.length === 0 && (
-          <div className="no-channels">
-            <p>No channels yet</p>
-            <p className="hint">Create one to get started!</p>
+          <div className="text-center py-7 px-4 text-[var(--text-muted)]">
+            <p className="text-sm">No channels yet</p>
+            <p className="text-xs mt-1 text-[var(--text-muted)]">Create one to get started!</p>
           </div>
         )}
       </nav>
 
+      {/* Context menu */}
       {contextMenu && (() => {
         const channel = channels.find((c) => c.id === contextMenu.channelId);
         const isGeneral = channel?.name === "general";
         return (
-          <div className="context-menu glass-strong animate-fade-in" style={{ top: contextMenu.y, left: contextMenu.x }} id="channel-context-menu">
+          <div 
+            className="fixed z-[100] min-w-[190px] p-1 rounded-[14px] shadow-[var(--shadow-lg)] backdrop-blur-xl bg-[var(--bg-elevated)]/95 border border-white/10 animate-[fadeIn_0.15s_ease]" 
+            style={{ top: contextMenu.y, left: contextMenu.x }} 
+            id="channel-context-menu"
+          >
             {!isGeneral && (
-              <button className="context-item context-item--danger" onClick={() => handleLeave(contextMenu.channelId)} id="leave-channel-btn">
-                <LogOut size={14} /><span>Leave Channel</span>
+              <button 
+                className="flex items-center gap-2 w-full px-3.5 py-2 border-none bg-none text-[var(--text-secondary)] text-[13px] font-semibold cursor-pointer rounded-[10px] transition-all duration-150 hover:bg-[var(--bg-hover)] hover:bg-rose-500/[0.08] hover:text-[var(--accent-rose)]" 
+                onClick={() => handleLeave(contextMenu.channelId)} 
+                id="leave-channel-btn"
+              >
+                <LogOut size={14} />
+                <span>Leave Channel</span>
               </button>
             )}
             {channel?.role === "admin" && !isGeneral && (
-              <button className="context-item context-item--danger" onClick={async () => {
-                closeContextMenu();
-                if (confirm(`Delete #${channel.name}? This cannot be undone.`)) {
-                  await fetch(`/api/channels/${channel.id}`, { method: "DELETE" });
-                  router.push("/channel"); router.refresh();
-                }
-              }} id="delete-channel-btn">
-                <Trash2 size={14} /><span>Delete Channel</span>
+              <button 
+                className="flex items-center gap-2 w-full px-3.5 py-2 border-none bg-none text-[var(--text-secondary)] text-[13px] font-semibold cursor-pointer rounded-[10px] transition-all duration-150 hover:bg-[var(--bg-hover)] hover:bg-rose-500/[0.08] hover:text-[var(--accent-rose)]" 
+                onClick={async () => {
+                  closeContextMenu();
+                  if (confirm(`Delete #${channel.name}? This cannot be undone.`)) {
+                    await fetch(`/api/channels/${channel.id}`, { method: "DELETE" });
+                    router.push("/channel"); 
+                    router.refresh();
+                  }
+                }} 
+                id="delete-channel-btn"
+              >
+                <Trash2 size={14} />
+                <span>Delete Channel</span>
               </button>
             )}
             {isGeneral && (
-              <div className="context-item context-item--disabled"><span>Cannot leave #general</span></div>
+              <div className="text-[var(--text-muted)] cursor-default text-xs px-3.5 py-2">
+                <span>Cannot leave #general</span>
+              </div>
             )}
           </div>
         );
       })()}
-
-      <style jsx>{`
-        .context-backdrop { position: fixed; inset: 0; z-index: 90; }
-        .channel-list { display: flex; flex-direction: column; gap: 3px; padding: 0 8px; }
-        .channel-item-wrap { position: relative; }
-        .channel-more {
-          position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-          background: none; border: none; color: var(--text-muted); padding: 4px;
-          border-radius: 8px; cursor: pointer; opacity: 0;
-          transition: all 0.2s var(--ease-smooth); z-index: 2; display: flex;
-        }
-        .channel-item-wrap:hover .channel-more { opacity: 1; }
-        .channel-more:hover { background: var(--bg-active); color: var(--text-primary); }
-        .channel-item {
-          display: flex; align-items: center; gap: 10px;
-          padding: 9px 12px; border-radius: var(--radius-sm);
-          cursor: pointer; transition: all 0.2s var(--ease-smooth);
-          text-decoration: none; color: var(--text-secondary);
-          position: relative; animation: fadeIn 0.35s var(--ease-smooth) backwards;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.03);
-        }
-        .channel-item:hover {
-          background: var(--bg-hover); color: var(--text-primary);
-          border-color: rgba(168, 85, 247, 0.08);
-          transform: translateX(2px);
-        }
-        .channel-item--active {
-          background: rgba(168, 85, 247, 0.08); color: var(--text-primary);
-          border-color: rgba(168, 85, 247, 0.15);
-          box-shadow: 0 0 12px rgba(168, 85, 247, 0.06);
-        }
-        .channel-item--leaving { opacity: 0.4; pointer-events: none; }
-        .channel-item--voice { border-color: rgba(34, 211, 238, 0.05); }
-        .channel-item--voice:hover { background: rgba(34, 211, 238, 0.06); border-color: rgba(34, 211, 238, 0.12); }
-        .active-indicator {
-          position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
-          width: 3px; height: 22px; background: var(--gradient-primary);
-          border-radius: 0 4px 4px 0; box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
-        }
-        .channel-icon {
-          width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-          background: rgba(168, 85, 247, 0.08); border-radius: 10px;
-          font-size: 14px; flex-shrink: 0; color: var(--text-muted); transition: all 0.2s ease;
-        }
-        .channel-icon--active {
-          background: var(--accent-gold-dim); color: var(--accent-gold);
-          box-shadow: 0 0 12px rgba(168, 85, 247, 0.15);
-        }
-        .channel-icon--voice { background: rgba(34, 211, 238, 0.08); color: var(--accent-cyan); }
-        .channel-info { flex: 1; min-width: 0; }
-        .channel-name { display: block; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .channel-preview { display: block; font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
-        .voice-count { display: block; font-size: 11px; color: var(--accent-cyan); font-weight: 700; margin-top: 2px; }
-        .channel-badges {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          margin-right: 4px;
-        }
-        .mention-badge {
-          min-width: 20px;
-          height: 20px;
-          padding: 0 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--accent-error, #EF4444);
-          color: white;
-          font-size: 10px;
-          font-weight: 700;
-          border-radius: 999px;
-          animation: pulse 2s ease-in-out infinite;
-        }
-        .unread-badge {
-          min-width: 20px;
-          height: 20px;
-          padding: 0 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--text-muted);
-          color: var(--bg-secondary);
-          font-size: 10px;
-          font-weight: 700;
-          border-radius: 999px;
-        }
-        .channel-time { font-size: 10px; color: var(--text-muted); flex-shrink: 0; font-weight: 500; }
-        .voice-users {
-          display: flex; gap: 4px; padding: 4px 14px 6px 52px; flex-wrap: wrap;
-        }
-        .voice-user { position: relative; width: 22px; height: 22px; }
-        .voice-user-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-cyan); }
-        .voice-user-fallback {
-          width: 22px; height: 22px; border-radius: 50%;
-          background: var(--gradient-primary); display: flex; align-items: center;
-          justify-content: center; font-size: 9px; font-weight: 700; color: white;
-        }
-        .voice-muted-dot { position: absolute; bottom: -1px; right: -1px; width: 8px; height: 8px; background: var(--accent-rose); border-radius: 50%; border: 1.5px solid var(--bg-secondary); }
-        .no-channels { text-align: center; padding: 28px 16px; color: var(--text-muted); }
-        .no-channels p { font-size: 14px; }
-        .hint { font-size: 12px !important; margin-top: 4px; color: var(--text-muted); }
-        .context-menu { position: fixed; z-index: 100; min-width: 190px; padding: 4px; border-radius: var(--radius); box-shadow: var(--shadow-lg); }
-        .context-item {
-          display: flex; align-items: center; gap: 8px; width: 100%;
-          padding: 9px 14px; border: none; background: none;
-          color: var(--text-secondary); font-size: 13px; font-weight: 600;
-          cursor: pointer; border-radius: var(--radius-sm); transition: all 0.15s ease;
-        }
-        .context-item:hover { background: var(--bg-hover); }
-        .context-item--danger:hover { background: rgba(251,113,133,0.08); color: var(--accent-rose); }
-        .context-item--disabled { color: var(--text-muted); cursor: default; font-size: 12px; }
-        .context-item--disabled:hover { background: none; }
-      `}</style>
     </>
   );
 }

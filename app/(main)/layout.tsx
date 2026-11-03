@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import AppShell from "@/components/layout/AppShell";
+import { SocketProvider } from "@/components/providers/SocketProvider";
 
 export default async function MainLayout({
   children,
@@ -145,11 +146,13 @@ export default async function MainLayout({
       }
 
       layoutContent = (
-        <Suspense fallback={<div className="loading-state">Loading workspace...</div>}>
-          <AppShell servers={servers} channels={channels} dmChannels={dmChannelsWithUsers} currentUser={user}>
-            {children}
-          </AppShell>
-        </Suspense>
+        <SocketProvider>
+          <Suspense fallback={<div className="loading-state">Loading workspace...</div>}>
+            <AppShell servers={servers} channels={channels} dmChannels={dmChannelsWithUsers} currentUser={user}>
+              {children}
+            </AppShell>
+          </Suspense>
+        </SocketProvider>
       );
     }
   } catch (error: any) {

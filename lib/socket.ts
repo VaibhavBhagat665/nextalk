@@ -10,13 +10,20 @@ export function getSocket(): Socket {
     socket = io(url, {
       autoConnect: false,
       transports: ["websocket", "polling"],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 10_000,
+      randomizationFactor: 0.5,
+      timeout: 20000,
     });
   }
   return socket;
 }
 
+/**
+ * @deprecated Use SocketProvider instead. This will be removed in a future version.
+ */
 export function connectSocket(token: string) {
   const s = getSocket();
   s.auth = { token };
@@ -26,6 +33,9 @@ export function connectSocket(token: string) {
   return s;
 }
 
+/**
+ * @deprecated Use SocketProvider instead. This will be removed in a future version.
+ */
 export function disconnectSocket() {
   if (socket?.connected) {
     socket.disconnect();

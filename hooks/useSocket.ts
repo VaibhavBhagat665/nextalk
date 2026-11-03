@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
-import { connectSocket, disconnectSocket, getSocket } from "@/lib/socket";
+import { useUser } from "@clerk/nextjs";
+import { useSocketContext } from "@/components/providers/SocketProvider";
 
 interface Message {
   id?: string;
@@ -33,61 +33,23 @@ interface TypingUser {
   imageUrl?: string | null;
 }
 
+/**
+ * Hook for channel-specific socket operations.
+ * Connection management is handled by SocketProvider.
+ * This hook only manages room joining/leaving and channel-specific events.
+ */
 export function useSocket(channelId: string | null) {
-  const { getToken, userId } = useAuth();
+  const { socket, isConnected } = useSocketContext();
   const { user } = useUser();
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null);
   const prevChannelRef = useRef<string | null>(null);
 
-  // Connect socket — only re-run when userId changes
-  useEffect(() => {
-    if (!userId || !user) return;
-
-    const connect = async () => {
-      try {
-        const token = await getToken();
-        const socket = connectSocket(token || "");
-
-        // Set auth data
-        socket.auth = {
-          token,
-          userId,
-          username: user.username || user.firstName || "User",
-          imageUrl: user.imageUrl || "",
-        };
-
-        if (!socket.connected) {
-          socket.connect();
-        }
-
-        const onConnect = () => setIsConnected(true);
-        const onDisconnect = () => setIsConnected(false);
-        const onPresence = (users: OnlineUser[]) => setOnlineUsers(users);
-
-        socket.off("connect", onConnect).on("connect", onConnect);
-        socket.off("disconnect", onDisconnect).on("disconnect", onDisconnect);
-        socket.off("presence:update", onPresence).on("presence:update", onPresence);
-      } catch (error) {
-        console.error("Socket connection error:", error);
-      }
-    };
-
-    connect();
-
-    return () => {
-      disconnectSocket();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
-
   // Join/leave channel rooms
   useEffect(() => {
-    const socket = getSocket();
-    if (!channelId) return;
+    if (!socket || !channelId) return;
 
     const joinChannel = () => {
       // Leave previous channel
@@ -98,10 +60,11 @@ export function useSocket(channelId: string | null) {
       prevChannelRef.current = channelId;
     };
 
-    if (socket?.connected) {
+    if (socket.connected) {
       joinChannel();
     }
-    // Also listen for (re)connect to join automatically
+
+    // Also listen for (re)connect to rejoin automatically
     socket.on("connect", joinChannel);
 
     // Clear typing but keep stale messages until new ones load
@@ -182,17 +145,28 @@ export function useSocket(channelId: string | null) {
       }
     };
 
+    const handlePresence = (users: OnlineUser[]) => {
+      setOnlineUsers(users);
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("message:reaction", handleReaction);
     socket.on("typing:update", handleTyping);
+    socket.on("presence:update", handlePresence);
 
     return () => {
       socket.off("connect", joinChannel);
       socket.off("message:new", handleNewMessage);
       socket.off("message:reaction", handleReaction);
       socket.off("typing:update", handleTyping);
+      socket.off("presence:update", handlePresence);
+
+      // Leave channel on unmount
+      if (channelId) {
+        socket.emit("channel:leave", channelId);
+      }
     };
-  }, [channelId]);
+  }, [socket, channelId]);
 
   // Send message
   const sendMessage = useCallback(
@@ -204,15 +178,14 @@ export function useSocket(channelId: string | null) {
       blurhash?: string,
       imageDimensions?: { width: number; height: number }
     ) => {
-      const socket = getSocket();
-      if (!socket?.connected || !channelId || !userId || !user) return;
+      if (!socket?.connected || !channelId || !user) return;
 
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const optimisticMessage: Message = {
         tempId,
         content,
-        userId,
+        userId: user.id,
         username: user.username || user.firstName || "User",
         imageUrl: user.imageUrl || "",
         channelId,
@@ -224,25 +197,40 @@ export function useSocket(channelId: string | null) {
         createdAt: new Date().toISOString(),
       };
 
+      // Add optimistic message
       setMessages((prev) => [...prev, optimisticMessage]);
 
-      socket.emit("message:send", {
-        channelId,
-        content,
-        fileUrl,
-        fileName,
-        fileType,
-        blurhash,
-        imageDimensions,
-        tempId,
-      });
+      // Send with callback to handle success/failure
+      socket.emit(
+        "message:send",
+        {
+          channelId,
+          content,
+          fileUrl,
+          fileName,
+          fileType,
+          blurhash,
+          imageDimensions,
+          tempId,
+        },
+        (response: any) => {
+          if (response?.error) {
+            // Server rejected the message - remove optimistic message
+            console.error("[useSocket] Message send failed:", response.message);
+            setMessages((prev) => prev.filter((m) => m.tempId !== tempId));
+            
+            // Could show a toast notification here
+            // toast.error(response.message || "Failed to send message");
+          }
+          // If successful, the server will broadcast message:new which will update the tempId
+        }
+      );
     },
-    [channelId, userId, user]
+    [socket, channelId, user]
   );
 
   // Typing indicators
   const startTyping = useCallback(() => {
-    const socket = getSocket();
     if (!socket?.connected || !channelId) return;
 
     socket.emit("typing:start", channelId);
@@ -254,17 +242,16 @@ export function useSocket(channelId: string | null) {
     typingTimeoutRef.current = window.setTimeout(() => {
       socket.emit("typing:stop", channelId);
     }, 3000);
-  }, [channelId]);
+  }, [socket, channelId]);
 
   // React to message
   const reactToMessage = useCallback(
     (messageId: string, emoji: string) => {
-      const socket = getSocket();
       if (!socket?.connected || !channelId) return;
 
       socket.emit("message:react", { messageId, emoji, channelId });
     },
-    [channelId]
+    [socket, channelId]
   );
 
   return {

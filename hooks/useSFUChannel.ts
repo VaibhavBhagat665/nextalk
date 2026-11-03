@@ -501,6 +501,10 @@ export function useSFUChannel(
         
         if (localStreamRef.current) {
           localStreamRef.current.addTrack(videoTrack);
+          // Create a new MediaStream with all current tracks to trigger React re-render
+          const newStream = new MediaStream(localStreamRef.current.getTracks());
+          localStreamRef.current = newStream;
+          setLocalStream(newStream);
         }
         
         // Produce video track with simulcast enabled
@@ -567,6 +571,10 @@ export function useSFUChannel(
           if (videoTrack) {
             videoTrack.stop();
             localStreamRef.current.removeTrack(videoTrack);
+            // Create a new MediaStream with remaining tracks to trigger React re-render
+            const newStream = new MediaStream(localStreamRef.current.getTracks());
+            localStreamRef.current = newStream;
+            setLocalStream(newStream);
           }
         }
         

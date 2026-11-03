@@ -8,6 +8,7 @@ import { latencyMiddleware } from "./latency-tracker";
 import { getAllMetrics, formatPrometheusMetrics } from "./metrics-service";
 import { sfuServer } from "./sfu-server";
 import { sendPushNotification } from "./push-notification-service";
+import { PresenceService } from "./presence-service";
 
 const app = express();
 const server = createServer(app);
@@ -25,12 +26,19 @@ const allowedOrigins = [
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
-        callback(null, true);
-      } else {
-        console.warn(`⛔ CORS blocked origin: ${origin}`);
-        callback(null, true); // Allow anyway in early deployment; tighten later
+      // Allow no-origin requests (native apps, Postman)
+      if (!origin) {
+        return callback(null, true);
       }
+      
+      // Check if origin matches any allowed origin exactly
+      if (allowedOrigins.some(allowed => origin === allowed)) {
+        return callback(null, true);
+      }
+      
+      // Reject all other origins
+      console.warn(`⛔ CORS blocked origin: ${origin}`);
+      callback(new Error(`Origin ${origin} not allowed by CORS`), false);
     },
     methods: ["GET", "POST"],
     credentials: true,
@@ -40,6 +48,8 @@ const io = new Server(server, {
 
 // Redis adapter for horizontal scaling
 let redisConnected = false;
+let presenceService: PresenceService | null = null;
+
 if (REDIS_URL) {
   try {
     const pubClient = new Redis(REDIS_URL, {
@@ -52,6 +62,9 @@ if (REDIS_URL) {
       enableOfflineQueue: false,
     });
     const subClient = pubClient.duplicate();
+
+    // Initialize presence service with pub client
+    presenceService = new PresenceService(pubClient);
 
     pubClient.on("connect", () => {
       console.log("✅ Redis pub client connected");
@@ -104,7 +117,8 @@ if (REDIS_URL) {
   console.log("ℹ️  No REDIS_URL configured, running in single-instance mode");
 }
 
-// Presence tracking
+// Presence tracking - delegated to PresenceService (Redis-based)
+// Falls back to in-memory if Redis unavailable
 type PresenceStatus = "online" | "away" | "offline";
 interface UserPresence {
   socketId: string;
@@ -114,28 +128,38 @@ interface UserPresence {
   lastActivity: number;
 }
 
-const onlineUsers = new Map<string, UserPresence>();
+// Fallback in-memory presence (used when Redis unavailable)
+const fallbackOnlineUsers = new Map<string, UserPresence>();
 
 // Check for idle users every 30 seconds
 const IDLE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 const AWAY_CHECK_INTERVAL = 30 * 1000; // 30 seconds
 
-setInterval(() => {
-  const now = Date.now();
-  let changed = false;
-  
-  for (const [userId, presence] of onlineUsers.entries()) {
-    const idleTime = now - presence.lastActivity;
-    const newStatus: PresenceStatus = idleTime > IDLE_THRESHOLD ? "away" : "online";
-    
-    if (presence.status !== newStatus) {
-      presence.status = newStatus;
-      changed = true;
+setInterval(async () => {
+  if (presenceService) {
+    // Redis-based idle check
+    const changedUsers = await presenceService.checkIdleUsers();
+    if (changedUsers.length > 0) {
+      await broadcastPresence();
     }
-  }
-  
-  if (changed) {
-    broadcastPresence();
+  } else {
+    // Fallback in-memory idle check
+    const now = Date.now();
+    let changed = false;
+    
+    for (const [userId, presence] of fallbackOnlineUsers.entries()) {
+      const idleTime = now - presence.lastActivity;
+      const newStatus: PresenceStatus = idleTime > IDLE_THRESHOLD ? "away" : "online";
+      
+      if (presence.status !== newStatus) {
+        presence.status = newStatus;
+        changed = true;
+      }
+    }
+    
+    if (changed) {
+      await broadcastPresence();
+    }
   }
 }, AWAY_CHECK_INTERVAL);
 
@@ -150,15 +174,29 @@ const socketVoiceRooms = new Map<string, string>();
 
 // Debounced presence updates
 let presenceUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
-const broadcastPresence = () => {
+const broadcastPresence = async () => {
   if (presenceUpdateTimeout) return;
-  presenceUpdateTimeout = setTimeout(() => {
-    io.emit("presence:update", Array.from(onlineUsers.entries()).map(([id, data]) => ({
-      userId: id,
-      username: data.username,
-      imageUrl: data.imageUrl,
-      status: data.status,
-    })));
+  presenceUpdateTimeout = setTimeout(async () => {
+    try {
+      let presenceData;
+      
+      if (presenceService) {
+        // Get presence from Redis
+        presenceData = await presenceService.getBroadcastData();
+      } else {
+        // Fallback to in-memory
+        presenceData = Array.from(fallbackOnlineUsers.entries()).map(([id, data]) => ({
+          userId: id,
+          username: data.username,
+          imageUrl: data.imageUrl,
+          status: data.status,
+        }));
+      }
+      
+      io.emit("presence:update", presenceData);
+    } catch (error) {
+      console.error("[broadcastPresence] Error:", error);
+    }
     presenceUpdateTimeout = null;
   }, 2000);
 };
@@ -194,26 +232,39 @@ async function sendPushForNewMessage(
     });
 
     // Filter out the sender and online users
-    const offlineMembers = memberships.filter((membership) => {
-      const userId = membership.user.clerkId;
-      
-      // Don't send push to the sender
-      if (userId === senderId) return false;
-      
-      // Don't send push if user is online and active
-      const presence = onlineUsers.get(userId);
-      if (presence && presence.status === "online") return false;
-      
-      // Send push if user is offline or away, and has push tokens
-      return membership.user.pushTokens.length > 0;
-    });
+    const offlineMembers = await Promise.all(
+      memberships.map(async (membership) => {
+        const userId = membership.user.clerkId;
+        
+        // Don't send push to the sender
+        if (userId === senderId) return null;
+        
+        // Check presence (Redis or fallback)
+        let isOnlineAndActive = false;
+        if (presenceService) {
+          const presence = await presenceService.getPresence(userId);
+          isOnlineAndActive = presence?.status === "online";
+        } else {
+          const presence = fallbackOnlineUsers.get(userId);
+          isOnlineAndActive = presence?.status === "online";
+        }
+        
+        // Don't send push if user is online and active
+        if (isOnlineAndActive) return null;
+        
+        // Send push if user is offline or away, and has push tokens
+        return membership.user.pushTokens.length > 0 ? membership : null;
+      })
+    );
 
-    if (offlineMembers.length === 0) {
+    const filtered = offlineMembers.filter((m): m is NonNullable<typeof m> => m !== null);
+
+    if (filtered.length === 0) {
       return;
     }
 
     // Send push notifications to offline members
-    const pushPromises = offlineMembers.flatMap((membership) =>
+    const pushPromises = filtered.flatMap((membership) =>
       membership.user.pushTokens.map((pushToken) => {
         // Truncate message content for preview (max 100 chars)
         const preview = messageContent.length > 100 
@@ -247,15 +298,24 @@ async function sendPushForNewMessage(
 }
 
 // Update user activity timestamp
-const updateUserActivity = (userId: string) => {
-  const presence = onlineUsers.get(userId);
-  if (presence) {
-    presence.lastActivity = Date.now();
-    // If user was away, set them back to online
-    if (presence.status === "away") {
-      presence.status = "online";
-      broadcastPresence();
+const updateUserActivity = async (userId: string) => {
+  try {
+    if (presenceService) {
+      await presenceService.updateActivity(userId);
+    } else {
+      // Fallback to in-memory
+      const presence = fallbackOnlineUsers.get(userId);
+      if (presence) {
+        presence.lastActivity = Date.now();
+        // If user was away, set them back to online
+        if (presence.status === "away") {
+          presence.status = "online";
+          await broadcastPresence();
+        }
+      }
     }
+  } catch (error) {
+    console.error("[updateUserActivity] Error:", error);
   }
 };
 
@@ -299,23 +359,23 @@ async function verifyChannelMembership(
 // Socket.io middleware — latency tracking
 io.use(latencyMiddleware);
 
-// Socket.io middleware — auth check
-io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  const userId = socket.handshake.auth.userId;
-  const username = socket.handshake.auth.username;
-  const imageUrl = socket.handshake.auth.imageUrl;
+// Socket.io middleware — auth check with Clerk JWT verification
+import { authenticateSocket } from "./socket-auth";
 
-  if (!userId || !username) {
-    return next(new Error("Authentication required"));
+io.use(async (socket, next) => {
+  try {
+    const authResult = await authenticateSocket(socket);
+    
+    // Attach verified user data to socket
+    (socket as any).userId = authResult.userId;
+    (socket as any).username = authResult.username;
+    (socket as any).imageUrl = authResult.imageUrl;
+
+    next();
+  } catch (error: any) {
+    console.error(`❌ Socket auth failed: ${error.message}`);
+    next(new Error(error.message || "Authentication failed"));
   }
-
-  // Attach user data to socket
-  (socket as any).userId = userId;
-  (socket as any).username = username;
-  (socket as any).imageUrl = imageUrl || "";
-
-  next();
 });
 
 io.on("connection", (socket) => {
@@ -325,9 +385,25 @@ io.on("connection", (socket) => {
 
   console.log(`🟢 ${username} connected (${socket.id})`);
 
-  // Track online presence
-  onlineUsers.set(userId, { socketId: socket.id, username, imageUrl, status: "online", lastActivity: Date.now() });
-  broadcastPresence();
+  // Track online presence (Redis or fallback)
+  (async () => {
+    try {
+      if (presenceService) {
+        await presenceService.setOnline(userId, socket.id, username, imageUrl);
+      } else {
+        fallbackOnlineUsers.set(userId, {
+          socketId: socket.id,
+          username,
+          imageUrl,
+          status: "online",
+          lastActivity: Date.now(),
+        });
+      }
+      await broadcastPresence();
+    } catch (error) {
+      console.error("[connection] Error setting presence:", error);
+    }
+  })();
 
   // Join channel room — with membership validation
   socket.on("channel:join", async (channelId: string) => {
@@ -735,8 +811,8 @@ io.on("connection", (socket) => {
   // ========================================
 
 
-  // Send message — validate sender is in the channel room
-  socket.on("message:send", (data: {
+  // Send message — server-authoritative (save first, then broadcast)
+  socket.on("message:send", async (data: {
     channelId: string;
     content: string;
     fileUrl?: string;
@@ -745,39 +821,155 @@ io.on("connection", (socket) => {
     blurhash?: string;
     imageDimensions?: { width: number; height: number };
     tempId: string;
-  }) => {
-    if (!data.channelId || !socket.rooms.has(`channel:${data.channelId}`)) {
-      socket.emit("error:unauthorized", {
-        message: "You must join the channel before sending messages",
-        channelId: data.channelId,
+  }, callback?: (response: any) => void) => {
+    try {
+      // S3.1: Validate channel membership
+      if (!data.channelId || !socket.rooms.has(`channel:${data.channelId}`)) {
+        const error = {
+          error: "unauthorized",
+          message: "You must join the channel before sending messages",
+          tempId: data.tempId,
+        };
+        socket.emit("error:unauthorized", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // Update user activity (reset away status)
+      updateUserActivity(userId);
+
+      // Rate Limiting (max 10 messages per 10 seconds)
+      const now = Date.now();
+      const userTimestamps = messageRateLimits.get(userId) || [];
+      const recentTimestamps = userTimestamps.filter(t => now - t < 10000);
+      
+      if (recentTimestamps.length >= 10) {
+        const error = {
+          error: "rate_limit",
+          message: "You are sending messages too fast. Please slow down.",
+          tempId: data.tempId,
+        };
+        socket.emit("error:rate-limit", error);
+        if (callback) callback(error);
+        return;
+      }
+      
+      recentTimestamps.push(now);
+      messageRateLimits.set(userId, recentTimestamps);
+
+      // S3.2: Validate content (not empty and within limits)
+      if (!data.content?.trim() && !data.fileUrl) {
+        const error = {
+          error: "validation",
+          message: "Message cannot be empty",
+          tempId: data.tempId,
+        };
+        socket.emit("error:validation", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      if (data.content && data.content.length > 4000) {
+        const error = {
+          error: "validation",
+          message: "Message too long (max 4000 characters)",
+          tempId: data.tempId,
+        };
+        socket.emit("error:validation", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // S3.3: Get user from database (required for foreign key)
+      const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
       });
-      return;
+
+      if (!user) {
+        const error = {
+          error: "auth",
+          message: "User not found in database",
+          tempId: data.tempId,
+        };
+        socket.emit("error:unauthorized", error);
+        if (callback) callback(error);
+        return;
+      }
+
+      // S3.4: SAVE TO DATABASE FIRST (server-authoritative)
+      const savedMessage = await prisma.message.create({
+        data: {
+          content: data.content.trim(),
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileType: data.fileType,
+          blurhash: data.blurhash,
+          imageDimensions: data.imageDimensions,
+          channelId: data.channelId,
+          userId: user.id,
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      // S3.5: Get channel info for push notifications
+      const channel = await prisma.channel.findUnique({
+        where: { id: data.channelId },
+      });
+
+      // S3.6: THEN broadcast with real DB ID and timestamp
+      const broadcastData = {
+        id: savedMessage.id,
+        content: savedMessage.content,
+        fileUrl: savedMessage.fileUrl,
+        fileName: savedMessage.fileName,
+        fileType: savedMessage.fileType,
+        blurhash: savedMessage.blurhash,
+        imageDimensions: savedMessage.imageDimensions,
+        channelId: savedMessage.channelId,
+        userId,
+        username,
+        imageUrl,
+        createdAt: savedMessage.createdAt.toISOString(),
+        tempId: data.tempId, // Client uses this to update optimistic UI
+      };
+
+      io.to(`channel:${data.channelId}`).emit("message:new", broadcastData);
+
+      // S3.7: Acknowledge to sender with real message data
+      if (callback) {
+        callback({
+          success: true,
+          message: {
+            id: savedMessage.id,
+            createdAt: savedMessage.createdAt.toISOString(),
+          },
+        });
+      }
+
+      // S3.8: Send push notifications to offline members
+      await sendPushForNewMessage(
+        data.channelId,
+        userId,
+        username,
+        data.content,
+        channel?.name
+      );
+
+      console.log(`  💬 ${username} sent message ${savedMessage.id} to channel:${data.channelId}`);
+    } catch (error: any) {
+      console.error("message:send error:", error);
+      
+      const errorResponse = {
+        error: "server",
+        message: "Failed to send message",
+        tempId: data.tempId,
+      };
+      
+      socket.emit("error:server", errorResponse);
+      if (callback) callback(errorResponse);
     }
-
-    // Update user activity (reset away status)
-    updateUserActivity(userId);
-
-    // Rate Limiting (max 10 messages per 10 seconds)
-    const now = Date.now();
-    const userTimestamps = messageRateLimits.get(userId) || [];
-    const recentTimestamps = userTimestamps.filter(t => now - t < 10000);
-    
-    if (recentTimestamps.length >= 10) {
-      socket.emit("error:rate-limit", { message: "You are sending messages too fast. Please slow down." });
-      return;
-    }
-    
-    recentTimestamps.push(now);
-    messageRateLimits.set(userId, recentTimestamps);
-
-    // Broadcast to channel room
-    io.to(`channel:${data.channelId}`).emit("message:new", {
-      ...data,
-      userId,
-      username,
-      imageUrl,
-      createdAt: new Date().toISOString(),
-    });
   });
 
   // Message reaction — validate sender is in the channel room
@@ -826,95 +1018,195 @@ io.on("connection", (socket) => {
 
   // --- WebRTC Signaling ---
 
-  socket.on("call:initiate", (data: { targetUserId: string; type: "voice" | "video"; channelId?: string }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:incoming", {
-        callerId: userId,
-        callerUsername: username,
-        callerImageUrl: imageUrl,
-        type: data.type,
-        channelId: data.channelId
-      });
+  socket.on("call:initiate", async (data: { targetUserId: string; type: "voice" | "video"; channelId?: string }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:incoming", {
+          callerId: userId,
+          callerUsername: username,
+          callerImageUrl: imageUrl,
+          type: data.type,
+          channelId: data.channelId
+        });
+      }
+    } catch (error) {
+      console.error("[call:initiate] Error:", error);
     }
   });
 
-  socket.on("call:accept", (data: { targetUserId: string }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:accepted", {
-        accepterId: userId
-      });
+  socket.on("call:accept", async (data: { targetUserId: string }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:accepted", {
+          accepterId: userId
+        });
+      }
+    } catch (error) {
+      console.error("[call:accept] Error:", error);
     }
   });
 
-  socket.on("call:reject", (data: { targetUserId: string }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:rejected", {
-        rejecterId: userId
-      });
+  socket.on("call:reject", async (data: { targetUserId: string }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:rejected", {
+          rejecterId: userId
+        });
+      }
+    } catch (error) {
+      console.error("[call:reject] Error:", error);
     }
   });
 
-  socket.on("call:offer", (data: { targetUserId: string; offer: any }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:offer", {
-        senderId: userId,
-        offer: data.offer
-      });
+  socket.on("call:offer", async (data: { targetUserId: string; offer: any }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:offer", {
+          senderId: userId,
+          offer: data.offer
+        });
+      }
+    } catch (error) {
+      console.error("[call:offer] Error:", error);
     }
   });
 
-  socket.on("call:answer", (data: { targetUserId: string; answer: any }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:answer", {
-        senderId: userId,
-        answer: data.answer
-      });
+  socket.on("call:answer", async (data: { targetUserId: string; answer: any }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:answer", {
+          senderId: userId,
+          answer: data.answer
+        });
+      }
+    } catch (error) {
+      console.error("[call:answer] Error:", error);
     }
   });
 
-  socket.on("call:ice-candidate", (data: { targetUserId: string; candidate: any }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:ice-candidate", {
-        senderId: userId,
-        candidate: data.candidate
-      });
+  socket.on("call:ice-candidate", async (data: { targetUserId: string; candidate: any }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:ice-candidate", {
+          senderId: userId,
+          candidate: data.candidate
+        });
+      }
+    } catch (error) {
+      console.error("[call:ice-candidate] Error:", error);
     }
   });
 
-  socket.on("call:end", (data: { targetUserId: string }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:ended", {
-        enderId: userId
-      });
+  socket.on("call:end", async (data: { targetUserId: string }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:ended", {
+          enderId: userId
+        });
+      }
+    } catch (error) {
+      console.error("[call:end] Error:", error);
     }
   });
 
-  socket.on("call:toggle-media", (data: { targetUserId: string; type: "mic" | "video"; enabled: boolean }) => {
-    const targetSocket = onlineUsers.get(data.targetUserId);
-    if (targetSocket) {
-      io.to(targetSocket.socketId).emit("call:media-toggled", {
-        senderId: userId,
-        type: data.type,
-        enabled: data.enabled
-      });
+  socket.on("call:toggle-media", async (data: { targetUserId: string; type: "mic" | "video"; enabled: boolean }) => {
+    try {
+      let targetSocket: UserPresence | null = null;
+      
+      if (presenceService) {
+        targetSocket = await presenceService.getPresence(data.targetUserId);
+      } else {
+        targetSocket = fallbackOnlineUsers.get(data.targetUserId) || null;
+      }
+      
+      if (targetSocket) {
+        io.to(targetSocket.socketId).emit("call:media-toggled", {
+          senderId: userId,
+          type: data.type,
+          enabled: data.enabled
+        });
+      }
+    } catch (error) {
+      console.error("[call:toggle-media] Error:", error);
     }
   });
 
   // Disconnect handler
   socket.on("disconnect", async () => {
     console.log(`🔴 ${username} disconnected`);
-    onlineUsers.delete(userId);
+    
+    // Remove presence (Redis or fallback)
+    try {
+      if (presenceService) {
+        await presenceService.setOffline(userId);
+      } else {
+        fallbackOnlineUsers.delete(userId);
+      }
+      await broadcastPresence();
+    } catch (error) {
+      console.error("[disconnect] Error removing presence:", error);
+    }
+    
     socketChannels.delete(socket.id);
     messageRateLimits.delete(userId);
     
-    broadcastPresence();
+    await broadcastPresence();
 
     // Handle sudden disconnect from voice channel
     const voiceChannelId = socketVoiceRooms.get(socket.id);
@@ -944,14 +1236,32 @@ io.on("connection", (socket) => {
 });
 
 // Health check
-app.get("/health", (_req, res) => {
+app.get("/health", async (_req, res) => {
   const sfuStats = sfuServer.getStats();
+  let presenceStats = null;
+  
+  if (presenceService) {
+    try {
+      presenceStats = await presenceService.getStats();
+    } catch (error) {
+      console.error("[health] Error getting presence stats:", error);
+    }
+  } else {
+    presenceStats = {
+      totalOnline: fallbackOnlineUsers.size,
+      onlineActive: Array.from(fallbackOnlineUsers.values()).filter(u => u.status === "online").length,
+      onlineAway: Array.from(fallbackOnlineUsers.values()).filter(u => u.status === "away").length,
+      instanceId: "fallback-memory",
+    };
+  }
+  
   res.json({
     status: "ok",
     connections: io.engine.clientsCount,
     redis: redisConnected ? "connected" : "disconnected",
     mode: redisConnected ? "multi-instance" : "single-instance",
     sfu: sfuStats,
+    presence: presenceStats,
   });
 });
 

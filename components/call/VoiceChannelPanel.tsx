@@ -580,13 +580,69 @@ export default function VoiceChannelPanel({ channelId, currentUserId, channelNam
 }
 
 function VideoCell({ stream, isLocal, muted, video, username, imageUrl, audioLevel }: any) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [hasLiveVideo, setHasLiveVideo] = useState(false);
 
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+  // Use callback ref to assign srcObject on mount and whenever stream changes
+  const setVideoEl = useCallback((el: HTMLVideoElement | null) => {
+    if (!el) return;
+    
+    // Always update srcObject when the element or stream reference changes
+    if (el.srcObject !== stream) {
+      el.srcObject = stream ?? null;
     }
+    
+    // Start playback (safe even if autoPlay is set)
+    el.play().catch((err) => {
+      // Autoplay policy may block unmuted video
+      console.warn("Video play failed (expected for autoplay policy):", err);
+    });
+  }, [stream]);
+
+  // Track whether we actually have live video tracks
+  useEffect(() => {
+    if (!stream) {
+      setHasLiveVideo(false);
+      return;
+    }
+
+    const checkVideoTrack = () => {
+      const videoTrack = stream.getVideoTracks()[0];
+      const isLive = videoTrack && 
+                     videoTrack.readyState === "live" && 
+                     videoTrack.enabled && 
+                     !videoTrack.muted;
+      setHasLiveVideo(isLive);
+    };
+
+    checkVideoTrack();
+
+    // Listen for track changes
+    const handleAddTrack = () => checkVideoTrack();
+    const handleRemoveTrack = () => checkVideoTrack();
+    const handleTrackEnded = () => setHasLiveVideo(false);
+    const handleTrackMute = () => checkVideoTrack();
+
+    stream.addEventListener("addtrack", handleAddTrack);
+    stream.addEventListener("removetrack", handleRemoveTrack);
+
+    // Track-level events
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.addEventListener("ended", handleTrackEnded);
+      videoTrack.addEventListener("mute", handleTrackMute);
+      videoTrack.addEventListener("unmute", handleTrackMute);
+    }
+
+    return () => {
+      stream.removeEventListener("addtrack", handleAddTrack);
+      stream.removeEventListener("removetrack", handleRemoveTrack);
+      if (videoTrack) {
+        videoTrack.removeEventListener("ended", handleTrackEnded);
+        videoTrack.removeEventListener("mute", handleTrackMute);
+        videoTrack.removeEventListener("unmute", handleTrackMute);
+      }
+    };
   }, [stream]);
   
   // Detect speaking based on audio level
@@ -596,44 +652,65 @@ function VideoCell({ stream, isLocal, muted, video, username, imageUrl, audioLev
       return;
     }
     
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      setIsSpeaking(false);
+      return;
+    }
     
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let audioContext: AudioContext | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
     let animationId: number;
     
-    const checkAudioLevel = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-      const normalizedLevel = average / 255;
+    try {
+      audioContext = new AudioContext();
+      source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
       
-      setIsSpeaking(normalizedLevel > 0.15);
-      animationId = requestAnimationFrame(checkAudioLevel);
-    };
-    
-    checkAudioLevel();
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const checkAudioLevel = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        const normalizedLevel = average / 255;
+        
+        setIsSpeaking(normalizedLevel > 0.15);
+        animationId = requestAnimationFrame(checkAudioLevel);
+      };
+      
+      checkAudioLevel();
+    } catch (err) {
+      console.error("Failed to create audio context:", err);
+    }
     
     return () => {
-      cancelAnimationFrame(animationId);
-      source.disconnect();
-      audioContext.close();
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      if (source) {
+        source.disconnect();
+      }
+      if (audioContext) {
+        audioContext.close();
+      }
     };
   }, [stream, muted]);
 
   return (
     <div className={`video-cell ${isSpeaking ? 'video-cell--speaking' : ''}`}>
-      {video && stream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className="video-element"
-        />
-      ) : (
+      {/* Always render video element but toggle visibility */}
+      <video
+        ref={setVideoEl}
+        autoPlay
+        playsInline
+        muted={isLocal}
+        className={`video-element ${!hasLiveVideo ? 'video-hidden' : ''}`}
+      />
+      
+      {/* Show avatar fallback when no video */}
+      {!hasLiveVideo && (
         <div className="avatar-fallback">
           {imageUrl ? (
             <img src={imageUrl} alt={username} />
@@ -688,6 +765,9 @@ function VideoCell({ stream, isLocal, muted, video, username, imageUrl, audioLev
           height: 100%;
           object-fit: cover;
           transform: ${isLocal ? "scaleX(-1)" : "none"};
+        }
+        .video-hidden {
+          display: none;
         }
         .avatar-fallback {
           width: 80px;

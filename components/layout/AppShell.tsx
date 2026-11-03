@@ -3,6 +3,7 @@
 import { useSearchParams, usePathname } from "next/navigation";
 import WorkspaceNav from "@/components/layout/WorkspaceNav";
 import Sidebar from "@/components/sidebar/Sidebar";
+import ConnectionStatus from "@/components/layout/ConnectionStatus";
 
 export default function AppShell({
   children,
@@ -48,54 +49,57 @@ export default function AppShell({
   });
 
   return (
-    <div className="app-shell">
-      <WorkspaceNav
-        currentUser={currentUser}
-        servers={servers}
-        activeServerId={activeServerId}
-      />
-      <div className="col-separator" />
-      <Sidebar
-        channels={isDMMode ? (dmChannels || []) : filteredChannels}
-        currentUser={currentUser}
-        serverName={activeServer?.name}
-        serverId={activeServerId}
-        serverInviteCode={activeServer?.inviteCode}
-        isDMMode={isDMMode}
-      />
-      <div className="col-separator" />
-      <main className="app-main">
-        {children}
-      </main>
+    <>
+      <ConnectionStatus />
+      <div className="app-shell">
+        <WorkspaceNav
+          currentUser={currentUser}
+          servers={servers}
+          activeServerId={activeServerId}
+        />
+        <div className="col-separator" />
+        <Sidebar
+          channels={isDMMode ? (dmChannels || []) : filteredChannels}
+          currentUser={currentUser}
+          serverName={activeServer?.name}
+          serverId={activeServerId}
+          serverInviteCode={activeServer?.inviteCode}
+          isDMMode={isDMMode}
+        />
+        <div className="col-separator" />
+        <main className="app-main">
+          {children}
+        </main>
 
-      <style jsx>{`
-        .app-shell {
-          display: flex;
-          height: 100vh;
-          width: 100vw;
-          overflow: hidden;
-          background: var(--bg-primary);
-        }
-        .col-separator {
-          width: 1px;
-          height: 100vh;
-          background: var(--gradient-divider);
-          flex-shrink: 0;
-          opacity: 0.5;
-        }
-        .app-main {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          background: var(--bg-primary);
-          position: relative;
-          min-width: 0;
-        }
-        @media (max-width: 768px) {
-          .col-separator { display: none; }
-        }
-      `}</style>
-    </div>
+        <style jsx>{`
+          .app-shell {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background: var(--bg-primary);
+          }
+          .col-separator {
+            width: 1px;
+            height: 100vh;
+            background: var(--gradient-divider);
+            flex-shrink: 0;
+            opacity: 0.5;
+          }
+          .app-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-primary);
+            position: relative;
+            min-width: 0;
+          }
+          @media (max-width: 768px) {
+            .col-separator { display: none; }
+          }
+        `}</style>
+      </div>
+    </>
   );
 }

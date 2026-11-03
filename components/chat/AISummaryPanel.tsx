@@ -70,7 +70,37 @@ export default function AISummaryPanel({
           since: lastSummarizedAt,
         }),
       });
+      
       const data = await res.json();
+      
+      // Handle error response
+      if (!res.ok || !data.ok) {
+        const error = data.error || {};
+        let errorMessage = error.message || "Failed to generate summary. Please try again.";
+        
+        // Special handling for specific error codes
+        if (error.code === "AI_NOT_CONFIGURED") {
+          errorMessage = "✨ AI features are not available right now. Contact your admin.";
+        } else if (error.code === "GROQ_RATE_LIMIT") {
+          errorMessage = "⏳ Too many requests. Please wait a moment and try again.";
+        } else if (error.code === "TIMEOUT") {
+          errorMessage = "⏱️ AI is taking too long. Try summarizing fewer messages.";
+        } else if (error.code === "INVALID_REQUEST" && error.message.includes("encrypted")) {
+          errorMessage = "🔒 AI cannot read encrypted messages for privacy reasons.";
+        }
+        
+        const errorEntry: SummaryEntry = {
+          summary: errorMessage,
+          actionItems: [],
+          keyTopics: [],
+          timestamp: new Date().toISOString(),
+          messageCount: 0,
+        };
+        setEntries((prev) => [errorEntry, ...prev]);
+        return;
+      }
+      
+      // Success response
       const now = new Date().toISOString();
 
       const newEntry: SummaryEntry = {
@@ -78,15 +108,16 @@ export default function AISummaryPanel({
         actionItems: data.actionItems || [],
         keyTopics: data.keyTopics || [],
         timestamp: now,
-        messageCount: newMessagesSinceLastSummary > 0 ? newMessagesSinceLastSummary : messageCount,
+        messageCount: data.messageCount || (newMessagesSinceLastSummary > 0 ? newMessagesSinceLastSummary : messageCount),
       };
 
       setEntries((prev) => [newEntry, ...prev]);
       setLastSummarizedAt(now);
       setLastMessageCount(messageCount);
-    } catch {
+    } catch (err) {
+      console.error("AI Summary fetch error:", err);
       const errorEntry: SummaryEntry = {
-        summary: "Failed to generate summary. Please try again.",
+        summary: "❌ Network error. Check your connection and try again.",
         actionItems: [],
         keyTopics: [],
         timestamp: new Date().toISOString(),

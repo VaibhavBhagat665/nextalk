@@ -1,11 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
   extensions = [vector]
 }
 
@@ -46,7 +46,7 @@ model PushToken {
   id        String   @id @default(cuid())
   userId    String
   token     String   @unique
-  platform  String   // "ios" | "android" | "web"
+  platform  String // "ios" | "android" | "web"
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -60,7 +60,7 @@ model PushToken {
 model Server {
   id         String   @id @default(cuid())
   name       String
-  icon       String?  // emoji or URL
+  icon       String? // emoji or URL
   ownerId    String
   inviteCode String   @unique @default(cuid())
   createdAt  DateTime @default(now())
@@ -136,31 +136,31 @@ model Membership {
 }
 
 model Message {
-  id         String   @id @default(cuid())
+  id         String                       @id @default(cuid())
   content    String
-  embedding  Unsupported("vector(1536)")?  // OpenAI text-embedding-3-small dimension
+  embedding  Unsupported("vector(1536)")? // OpenAI text-embedding-3-small dimension
   fileUrl    String?
   fileName   String?
   fileType   String?
-  isEdited   Boolean  @default(false)
-  isDeleted  Boolean  @default(false)
-  isSystem   Boolean  @default(false)
-  encrypted  Boolean  @default(false)
-  iv         String?  // Initialization vector for E2E encryption
-  salt       String?  // Salt for HKDF key derivation
-  keyVersion Int?     // Key version for E2E encryption with rotation
+  isEdited   Boolean                      @default(false)
+  isDeleted  Boolean                      @default(false)
+  isSystem   Boolean                      @default(false)
+  encrypted  Boolean                      @default(false)
+  iv         String? // Initialization vector for E2E encryption
+  salt       String? // Salt for HKDF key derivation
+  keyVersion Int? // Key version for E2E encryption with rotation
   channelId  String
   userId     String
   dmToUserId String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime                     @default(now())
+  updatedAt  DateTime                     @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
   reactions Reaction[]
 
-  @@index([channelId, createdAt])  // Composite index for sorted channel queries
-  @@index([channelId, id])          // Composite index for cursor pagination
+  @@index([channelId, createdAt]) // Composite index for sorted channel queries
+  @@index([channelId, id]) // Composite index for cursor pagination
   @@index([dmToUserId])
   @@index([userId])
 }
@@ -192,28 +192,28 @@ model AISummary {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([channelId, createdAt])
-  @@index([expiresAt])  // For cleanup jobs to remove expired summaries
+  @@index([expiresAt]) // For cleanup jobs to remove expired summaries
 }
 
 model UserSettings {
-  id                    String  @id @default(cuid())
-  userId                String  @unique
+  id                     String  @id @default(cuid())
+  userId                 String  @unique
   // Notifications
-  desktopNotifications  Boolean @default(true)
-  soundAlerts           Boolean @default(true)
-  muteAll               Boolean @default(false)
-  dmNotificationsOnly   Boolean @default(false)
+  desktopNotifications   Boolean @default(true)
+  soundAlerts            Boolean @default(true)
+  muteAll                Boolean @default(false)
+  dmNotificationsOnly    Boolean @default(false)
   // Privacy
-  showOnlineStatus      Boolean @default(true)
-  readReceipts          Boolean @default(true)
+  showOnlineStatus       Boolean @default(true)
+  readReceipts           Boolean @default(true)
   allowDmsFromNonMembers Boolean @default(true)
   // Appearance
-  timeFormat            String  @default("12h") // "12h" | "24h"
-  dateFormat            String  @default("MM/DD/YYYY")
+  timeFormat             String  @default("12h") // "12h" | "24h"
+  dateFormat             String  @default("MM/DD/YYYY")
   // E2E Encryption
-  publicKey             String? // Legacy ECDH P-256 public key (JWK JSON)
-  x25519PublicKey       String? // X25519 public key (base64-encoded)
-  x25519KeyVersion      Int     @default(1) // For key rotation
+  publicKey              String? // Legacy ECDH P-256 public key (JWK JSON)
+  x25519PublicKey        String? // X25519 public key (base64-encoded)
+  x25519KeyVersion       Int     @default(1) // For key rotation
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -225,7 +225,7 @@ model InviteLink {
   code      String    @unique
   channelId String
   creatorId String
-  maxUses   Int?      // null = unlimited
+  maxUses   Int? // null = unlimited
   uses      Int       @default(0)
   expiresAt DateTime?
   isActive  Boolean   @default(true)
@@ -236,8 +236,8 @@ model InviteLink {
 
   @@index([code])
   @@index([channelId])
-  @@index([expiresAt])  // For cleanup jobs to remove expired invites
-  @@index([isActive])   // For filtering active invites
+  @@index([expiresAt]) // For cleanup jobs to remove expired invites
+  @@index([isActive]) // For filtering active invites
 }
 
 model CallSession {
@@ -249,7 +249,7 @@ model CallSession {
   status    String    @default("ringing") // "ringing" | "active" | "ended" | "missed" | "rejected"
   startedAt DateTime?
   endedAt   DateTime?
-  duration  Int?      // seconds
+  duration  Int? // seconds
   createdAt DateTime  @default(now())
 
   caller User @relation("CallCaller", fields: [callerId], references: [id], onDelete: Cascade)
@@ -258,8 +258,8 @@ model CallSession {
   @@index([callerId])
   @@index([calleeId])
   @@index([channelId])
-  @@index([status])      // For filtering active/ringing calls
-  @@index([createdAt])   // For call history queries
+  @@index([status]) // For filtering active/ringing calls
+  @@index([createdAt]) // For call history queries
 }
 
 model VoiceState {
@@ -281,9 +281,9 @@ model VoiceState {
 
 model DMSessionKey {
   id             String   @id @default(cuid())
-  conversationId String   // Sorted userId pair: "user1_user2"
+  conversationId String // Sorted userId pair: "user1_user2"
   keyVersion     Int      @default(1)
-  salt           String   // Base64-encoded salt for HKDF
+  salt           String // Base64-encoded salt for HKDF
   messageCount   Int      @default(0)
   createdAt      DateTime @default(now())
   expiresAt      DateTime
@@ -295,30 +295,15 @@ model DMSessionKey {
 
 model KeyVerification {
   id             String   @id @default(cuid())
-  userId         String   // The user who verified
-  verifiedUserId String   // The user being verified
-  conversationId String   // Sorted userId pair: "user1_user2"
+  userId         String // The user who verified
+  verifiedUserId String // The user being verified
+  conversationId String // Sorted userId pair: "user1_user2"
   verified       Boolean  @default(true)
-  safetyNumber   String   // The safety number that was verified
+  safetyNumber   String // The safety number that was verified
   verifiedAt     DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@unique([userId, verifiedUserId])
   @@index([userId])
   @@index([conversationId])
-}
-
-model PushToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  platform  String   // "ios" | "android" | "web"
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([isActive])
 }
