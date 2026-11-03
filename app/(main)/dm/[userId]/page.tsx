@@ -173,12 +173,12 @@ export default function DMPage() {
             // Decrypt in background without blocking UI
             (async () => {
               try {
+                const msg = m as any; // Type assertion for encrypted fields
                 const encryptedMessage = {
-                  // @ts-ignore - encrypted messages have these fields
-                  ciphertext: m.content,
-                  iv: m.iv || '',
-                  salt: m.salt || '',
-                  keyVersion: m.keyVersion || 1,
+                  ciphertext: msg.content,
+                  iv: msg.iv || '',
+                  salt: msg.salt || '',
+                  keyVersion: msg.keyVersion || 1,
                 };
                 const decrypted = await decryptDM(
                   encryptedMessage,
