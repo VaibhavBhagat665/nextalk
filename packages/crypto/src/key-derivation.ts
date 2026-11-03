@@ -6,8 +6,8 @@ import { x25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { randomBytes } from '@noble/hashes/utils';
-import { CryptoError, CryptoErrorCode } from './types.js';
-import { validateKey } from './key-generation.js';
+import { CryptoError, CryptoErrorCode } from './types';
+import { validateKey } from './key-generation';
 
 /**
  * Derive a shared secret using X25519 ECDH

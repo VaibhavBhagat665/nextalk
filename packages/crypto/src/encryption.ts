@@ -7,8 +7,8 @@
  */
 
 import { randomBytes } from '@noble/hashes/utils';
-import { EncryptedMessage, CryptoError, CryptoErrorCode } from './types.js';
-import { bytesToBase64, base64ToBytes } from './utils.js';
+import { EncryptedMessage, CryptoError, CryptoErrorCode } from './types';
+import { bytesToBase64, base64ToBytes } from './utils';
 
 /**
  * Encrypt a message using AES-256-GCM

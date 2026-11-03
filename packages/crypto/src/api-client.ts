@@ -5,8 +5,8 @@
  * for storing and retrieving X25519 public keys.
  */
 
-import { bytesToBase64, base64ToBytes } from './utils.js';
-import { CryptoError, CryptoErrorCode } from './types.js';
+import { bytesToBase64, base64ToBytes } from './utils';
+import { CryptoError, CryptoErrorCode } from './types';
 
 /**
  * Upload a public key to the server

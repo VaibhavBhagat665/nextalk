@@ -5,8 +5,8 @@
  * Public keys are stored in PostgreSQL via API and shared with other users.
  */
 
-import { CryptoError, CryptoErrorCode } from './types.js';
-import { bytesToBase64, base64ToBytes } from './utils.js';
+import { CryptoError, CryptoErrorCode } from './types';
+import { bytesToBase64, base64ToBytes } from './utils';
 
 const DB_NAME = 'nextalk-crypto-keys';
 const STORE_NAME = 'x25519-keys';
@@ -304,7 +304,7 @@ export async function hasPrivateKey(userId: string): Promise<boolean> {
  * 
  * @example
  * ```typescript
- * import { generateX25519KeyPair } from './key-generation.js';
+ * import { generateX25519KeyPair } from './key-generation';
  * 
  * const keyPair = await getOrCreateKeyPair('user123', generateX25519KeyPair);
  * // Upload keyPair.publicKey to server

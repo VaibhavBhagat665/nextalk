@@ -4,7 +4,7 @@
 
 import { x25519 } from '@noble/curves/ed25519';
 import { randomBytes } from '@noble/hashes/utils';
-import { KeyPair, CryptoError, CryptoErrorCode } from './types.js';
+import { KeyPair, CryptoError, CryptoErrorCode } from './types';
 
 /**
  * Feature detection: Check if Web Crypto API supports X25519

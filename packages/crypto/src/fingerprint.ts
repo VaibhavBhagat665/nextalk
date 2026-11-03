@@ -9,7 +9,7 @@
  */
 
 import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from './utils.js';
+import { bytesToHex } from './utils';
 
 /**
  * Generate a safety number (fingerprint) from two public keys

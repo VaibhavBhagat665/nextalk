@@ -7,8 +7,8 @@
  * whichever comes first.
  */
 
-import { deriveSessionKey, generateSalt, createConversationId } from './key-derivation.js';
-import { SessionKeyMetadata, CryptoError, CryptoErrorCode } from './types.js';
+import { deriveSessionKey, generateSalt, createConversationId } from './key-derivation';
+import { SessionKeyMetadata, CryptoError, CryptoErrorCode } from './types';
 
 /**
  * Session key rotation thresholds
