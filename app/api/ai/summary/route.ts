@@ -90,7 +90,7 @@ export async function POST(req: Request): Promise<NextResponse<SuccessResponse |
           ok: false,
           error: {
             code: AIErrorCode.INVALID_REQUEST,
-            message: validation.error.errors[0]?.message || "Invalid request",
+            message: validation.error.issues[0]?.message || "Invalid request",
             retryable: false,
           },
         },
