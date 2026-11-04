@@ -123,64 +123,6 @@ export default function RightPanel({
 
       {/* Tab Content */}
       <div className="panel-body">
-        {/* Profile Tab */}
-        {activeTab === "profile" && (
-          <div className="tab-content animate-fade-in">
-            {/* User Card */}
-            <div className="profile-card card">
-              <div className="profile-avatar-section">
-                {user?.imageUrl ? (
-                  <Image
-                    src={user.imageUrl}
-                    alt={user.username || "User"}
-                    width={64}
-                    height={64}
-                    className="profile-avatar"
-                  />
-                ) : (
-                  <div className="profile-avatar-fallback">
-                    {getInitials(user?.username || user?.firstName || "U")}
-                  </div>
-                )}
-                <div className="profile-presence" />
-              </div>
-              <h3 className="profile-name">
-                {user?.firstName} {user?.lastName}
-              </h3>
-              <p className="profile-username">@{user?.username}</p>
-
-              <div className="profile-details">
-                <div className="profile-detail-row">
-                  <Mail size={14} />
-                  <span>{user?.emailAddresses?.[0]?.emailAddress}</span>
-                </div>
-                <div className="profile-detail-row">
-                  <Shield size={14} />
-                  <span>Member</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Server Roles */}
-            <div className="section-block">
-              <h4 className="section-label">
-                <Crown size={13} />
-                Server Roles
-              </h4>
-              <div className="role-list">
-                <div className="role-badge role-badge--admin">
-                  <span className="role-dot" style={{ background: "var(--accent-gold)" }} />
-                  Admin
-                </div>
-                <div className="role-badge">
-                  <span className="role-dot" style={{ background: "var(--accent-gold)" }} />
-                  Member
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Members Tab */}
         {activeTab === "members" && (
           <div className="tab-content animate-fade-in">
