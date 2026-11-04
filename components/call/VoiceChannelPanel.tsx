@@ -110,7 +110,7 @@ export default function VoiceChannelPanel({ channelId, currentUserId, channelNam
             try {
               const stats = await consumer.getStats();
               
-              stats.forEach(report => {
+              stats.forEach((report: any) => {
                 if (report.type === 'inbound-rtp') {
                   const packetsLost = report.packetsLost || 0;
                   const packetsReceived = report.packetsReceived || 1;
