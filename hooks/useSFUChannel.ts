@@ -21,7 +21,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
 import { MediasoupClient } from "@/lib/mediasoup-client";
 import { getIceServers } from "@/lib/turn-config";
-import type { Producer, Consumer, Transport } from "mediasoup-client/lib/types";
+import type { Producer, Consumer, Transport } from "mediasoup-client";
 
 export interface SFUParticipant {
   userId: string;
