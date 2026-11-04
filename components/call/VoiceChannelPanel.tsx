@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, MicOff, Headphones, Video, VideoOff, PhoneOff, MonitorUp, Volume2, Zap } from "lucide-react";
 import { useVoiceChannel, VoiceParticipant } from "@/hooks/useVoiceChannel";
 import { useSFUChannel } from "@/hooks/useSFUChannel";
