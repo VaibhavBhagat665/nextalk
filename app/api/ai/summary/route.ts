@@ -122,7 +122,6 @@ export async function POST(req: Request): Promise<NextResponse<SuccessResponse |
         channel: {
           select: {
             isDM: true,
-            encrypted: true,
             serverId: true,
           },
         },
