@@ -12,6 +12,7 @@ export interface VoiceParticipant {
   muted: boolean;
   deafened: boolean;
   video: boolean;
+  audioLevel?: number;
 }
 
 export function useVoiceChannel(channelId: string | null, currentUserId: string | undefined) {
