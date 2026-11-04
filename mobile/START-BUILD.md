@@ -1,152 +1,50 @@
-# 🚀 Start Your Android APK Build NOW
+# Start Mobile APK Build
 
-## Current Status
-✅ EAS CLI installed (version 20.2.0 available)  
-❌ Not logged in to Expo  
+## Quick Start
 
----
-
-## Step 1: Login to Expo (Required - One Time)
-
-Open PowerShell in the `mobile` directory and run:
+**The dependency installation had issues. To fix and build:**
 
 ```powershell
-cd "C:\Users\DELL\Desktop\projects\nextalk\mobile"
-eas login
-```
+cd mobile
 
-**You'll be prompted for:**
-- Email/Username
-- Password
+# Clean and fresh install
+Remove-Item -Recurse -Force node_modules
+Remove-Item package-lock.json
+npm install --legacy-peer-deps
 
-**Don't have an Expo account?** 
-- Option 1: Create one at https://expo.dev/signup
-- Option 2: Login with GitHub: `eas login --github`
-
----
-
-## Step 2: Start the Build
-
-After logging in, run:
-
-```powershell
+# Then build
 eas build --platform android --profile preview
 ```
 
-**What happens:**
-1. ✅ Validates your configuration
-2. ✅ Uploads your code to EAS servers
-3. ⏳ Builds APK (10-15 minutes)
-4. 📥 Provides download link
+## Build Status
 
----
+- **Project**: `nextalk-mobile` (ID: `fbc33a7b-aace-4b05-876d-7ac992217ec8`)
+- **Account**: `bosswire`
+- **Profile**: `preview` (APK build)
 
-## Alternative: Quick One-Liner
+## What Was Fixed
 
-```powershell
-cd "C:\Users\DELL\Desktop\projects\nextalk\mobile" ; eas login ; eas build --platform android --profile preview
+1. ✅ Embedded `packages/crypto` locally (`./packages/crypto`)
+2. ✅ Fixed `react-native-reanimated` version to `~4.0.0`
+3. ✅ Added `.easignore` to optimize upload
+4. ⚠️ Node modules installation needs completion
+
+## Monitor Build
+
+Once started, monitor at:
+```
+https://expo.dev/accounts/bosswire/projects/nextalk-mobile/builds
 ```
 
-This will:
-1. Navigate to mobile directory
-2. Login (if needed)
-3. Start build immediately
+Or watch in terminal - build takes ~15 minutes.
 
----
+## Download APK
 
-## Expected Output
-
-### During Login:
-```
-? Email or username: your-email@example.com
-? Password: ********
-✔ Logged in
-```
-
-### During Build:
-```
-✔ Build type: apk
-✔ Using profile: preview
-✔ Uploading...
-✔ Queued
-
-Build Details:
-https://expo.dev/accounts/bosswire/projects/nextalk-mobile/builds/xxxxxx
-
-⏳ Waiting for build to complete...
-```
-
-### After Build:
-```
-✔ Build finished
-
-Install URL: https://expo.dev/artifacts/eas/xxxxx.apk
-QR Code: [Scan with device]
-
-Download: eas build:download <build-id>
-```
-
----
-
-## Option: Use GitHub Login (Easier)
-
-```powershell
-eas login --github
-```
-
-This opens GitHub OAuth - no need to create separate Expo account!
-
----
+After build completes, get the APK from the Expo dashboard or the download link provided in terminal.
 
 ## Troubleshooting
 
-### "Command not found: eas"
-Install EAS CLI:
+If `expo-router` errors persist:
 ```powershell
-npm install -g eas-cli
+npm install @expo/schema-utils --save-dev --legacy-peer-deps
 ```
-
-### "Not enough build credits"
-- Free tier: 30 builds/month
-- Check: https://expo.dev/accounts/settings/billing
-
-### "Project not configured"
-Already configured! Project ID: `fbc33a7b-aace-4b05-876d-7ac992217ec8`
-
----
-
-## After Build Completes
-
-### Download APK
-Three ways:
-1. **Click the link** in terminal output
-2. **Scan QR code** with Android device
-3. **Download later**: `eas build:list` then `eas build:download <id>`
-
-### Install on Device
-1. Enable "Install from Unknown Sources" (Android settings)
-2. Transfer APK to device
-3. Tap to install
-4. Grant permissions when prompted
-
----
-
-## Ready to Build?
-
-### Quick Copy-Paste:
-```powershell
-cd "C:\Users\DELL\Desktop\projects\nextalk\mobile"
-eas login
-eas build --platform android --profile preview
-```
-
-**That's it!** 🎉
-
-Your APK will be ready in ~15 minutes!
-
----
-
-**Current Time**: Ready to start  
-**Build Duration**: 10-15 minutes  
-**Cost**: Free (uses Expo free tier credits)  
-**Output**: `.apk` file ready to install
