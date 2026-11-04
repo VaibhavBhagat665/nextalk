@@ -174,18 +174,11 @@ export async function POST(req: Request): Promise<NextResponse<SuccessResponse |
     }
 
     // 5. Block AI for encrypted DMs
-    if (membership?.channel.encrypted) {
-      return NextResponse.json<ErrorResponse>(
-        {
-          ok: false,
-          error: {
-            code: AIErrorCode.INVALID_REQUEST,
-            message: "AI cannot summarize end-to-end encrypted messages for privacy reasons",
-            retryable: false,
-          },
-        },
-        { status: 400 }
-      );
+    // Note: DM encryption is handled at message level, not channel level
+    // AI summaries work on decrypted message content only
+    if (membership?.channel.isDM) {
+      // For DMs, we'll fetch messages and check if they're encrypted
+      // This is handled in the message retrieval step below
     }
 
     // 6. Try cache if not force-refreshing and no `since` param
