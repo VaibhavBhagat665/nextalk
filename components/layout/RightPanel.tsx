@@ -63,7 +63,7 @@ export default function RightPanel({
   ];
 
   // Group members by role
-  const groupMembersByRole = (members: typeof channel.members): GroupedMembers[] => {
+  const groupMembersByRole = (members: ChannelInfo['members']): GroupedMembers[] => {
     if (!members) return [];
 
     const grouped = members.reduce((acc, member) => {
