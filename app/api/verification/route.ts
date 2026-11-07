@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { safeKeyVerification } from "@/lib/prisma-safe";
 
 /**
  * GET /api/verification?verifiedUserId=xxx
@@ -32,16 +33,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Check verification status
-    const verification = await prisma.keyVerification.findUnique({
+    const verification = await safeKeyVerification.findUnique({
       where: {
         userId_verifiedUserId: {
           userId: user.id,
           verifiedUserId: verifiedUserId,
         },
       },
-    }).catch(err => {
-      console.error("KeyVerification table error:", err);
-      return null;
     });
 
     return NextResponse.json({
@@ -93,7 +91,7 @@ export async function POST(req: NextRequest) {
     const conversationId = [user.id, verifiedUserId].sort().join("_");
 
     // Upsert verification record
-    const verification = await prisma.keyVerification.upsert({
+    const verification = await safeKeyVerification.upsert({
       where: {
         userId_verifiedUserId: {
           userId: user.id,
