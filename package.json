@@ -10,7 +10,7 @@
     "dev:next": "next dev --turbopack",
     "dev:socket": "tsx --watch server/socket-server.ts",
     "build": "prisma generate && next build",
-    "vercel-build": "prisma generate && next build",
+    "vercel-build": "prisma generate && prisma db push --accept-data-loss && next build",
     "start": "next start",
     "start:socket": "npx tsx server/socket-server.ts",
     "db:push": "prisma db push",

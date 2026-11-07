@@ -39,6 +39,9 @@ export async function GET(req: NextRequest) {
           verifiedUserId: verifiedUserId,
         },
       },
+    }).catch(err => {
+      console.error("KeyVerification table error:", err);
+      return null;
     });
 
     return NextResponse.json({
