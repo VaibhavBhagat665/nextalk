@@ -1,0 +1,30 @@
+services:
+  # Socket.io Server
+  - type: web
+    name: nextalk-socket-server
+    runtime: node
+    env: node
+    region: oregon # or your preferred region
+    plan: starter # or free
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm run start:socket
+    nodeVersion: 20.11.0
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Set this in Render dashboard
+      - key: CLERK_SECRET_KEY
+        sync: false # Set this in Render dashboard
+      - key: REDIS_URL
+        sync: false # Set this in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false # Set this in Render dashboard (optional)
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false # Set this in Render dashboard
+      - key: CLOUDINARY_API_KEY
+        sync: false # Set this in Render dashboard
+      - key: CLOUDINARY_API_SECRET
+        sync: false # Set this in Render dashboard
+    healthCheckPath: /health
+    autoDeploy: true
