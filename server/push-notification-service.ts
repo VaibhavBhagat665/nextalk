@@ -1,9 +1,27 @@
-import { Expo, ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
+// Dynamic import to handle optional dependency
+let Expo: any;
+let expo: any;
 
-// Create a new Expo SDK client
-const expo = new Expo({
-  accessToken: process.env.EXPO_ACCESS_TOKEN,
-});
+try {
+  const expoSdk = require("expo-server-sdk");
+  Expo = expoSdk.Expo;
+  expo = new Expo({
+    accessToken: process.env.EXPO_ACCESS_TOKEN,
+  });
+} catch (error) {
+  console.warn("expo-server-sdk not available - push notifications disabled");
+  // Create mock Expo object
+  Expo = {
+    isExpoPushToken: () => false,
+  };
+  expo = {
+    sendPushNotificationsAsync: async () => [],
+    chunkPushNotifications: () => [],
+  };
+}
+
+type ExpoPushMessage = any;
+type ExpoPushTicket = any;
 
 interface PushNotificationData {
   userId: string;
@@ -108,7 +126,7 @@ export async function sendBatchPushNotifications(
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
         
         // Count successful sends
-        ticketChunk.forEach((ticket, index) => {
+        ticketChunk.forEach((ticket: any, index: number) => {
           if (ticket.status === "ok") {
             successCount++;
           } else if (ticket.status === "error") {

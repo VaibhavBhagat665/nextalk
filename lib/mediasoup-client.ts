@@ -12,16 +12,16 @@
  */
 
 import * as mediasoupClient from 'mediasoup-client';
-import type {
-  Device,
-  Transport,
-  Producer,
-  Consumer,
-  RtpCapabilities,
-  DtlsParameters,
-  IceCandidate,
-  IceParameters,
-} from 'mediasoup-client/lib/types';
+import type { types } from 'mediasoup-client';
+
+type Device = types.Device;
+type Transport = types.Transport;
+type Producer = types.Producer;
+type Consumer = types.Consumer;
+type RtpCapabilities = types.RtpCapabilities;
+type DtlsParameters = types.DtlsParameters;
+type IceCandidate = types.IceCandidate;
+type IceParameters = types.IceParameters;
 
 // ============================================================================
 // Types
@@ -151,7 +151,7 @@ export class MediasoupClient {
       this.sendTransport = this.device.createSendTransport(transportConfig);
 
       // Handle transport connection
-      this.sendTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
         try {
           // This callback will be called by the application to connect the transport
           console.log('🔌 Send transport connecting...');
@@ -162,7 +162,7 @@ export class MediasoupClient {
       });
 
       // Handle producer creation
-      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }, callback, errback) => {
+      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: (params: { id: string }) => void, errback: (error: Error) => void) => {
         try {
           // This callback will be called by the application to notify server of new producer
           console.log(`🎤 Producing ${kind}...`);
@@ -172,7 +172,7 @@ export class MediasoupClient {
         }
       });
 
-      this.sendTransport.on('connectionstatechange', (state) => {
+      this.sendTransport.on('connectionstatechange', (state: any) => {
         console.log(`📡 Send transport state: ${state}`);
         if (state === 'connected') {
           this.emit('transportConnected', this.sendTransport!.id);
@@ -216,7 +216,7 @@ export class MediasoupClient {
       this.recvTransport = this.device.createRecvTransport(transportConfig);
 
       // Handle transport connection
-      this.recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      this.recvTransport.on('connect', async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
         try {
           console.log('🔌 Receive transport connecting...');
           callback();
@@ -225,7 +225,7 @@ export class MediasoupClient {
         }
       });
 
-      this.recvTransport.on('connectionstatechange', (state) => {
+      this.recvTransport.on('connectionstatechange', (state: any) => {
         console.log(`📡 Receive transport state: ${state}`);
         if (state === 'connected') {
           this.emit('transportConnected', this.recvTransport!.id);

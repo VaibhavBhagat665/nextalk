@@ -24,7 +24,7 @@ export async function initializeDMEncryption(
   otherUserPublicKey: string
 ) {
   // 1. Generate or retrieve your key pair
-  const myKeyPair = generateX25519KeyPair();
+  const myKeyPair = await generateX25519KeyPair();
   
   // 2. Store your private key securely (IndexedDB)
   // await storePrivateKeyInIndexedDB(myUserId, myKeyPair.privateKey);
@@ -38,7 +38,7 @@ export async function initializeDMEncryption(
   
   // 5. Derive shared secret via ECDH
   const otherPublicKey = Uint8Array.from(atob(otherUserPublicKey), c => c.charCodeAt(0));
-  const sharedSecret = deriveSharedSecret(myKeyPair.privateKey, otherPublicKey);
+  const sharedSecret = await deriveSharedSecret(myKeyPair.privateKey, otherPublicKey);
   
   // 6. Generate salt and derive session key
   const salt = generateSalt();

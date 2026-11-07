@@ -21,7 +21,11 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
 import { MediasoupClient } from "@/lib/mediasoup-client";
 import { getIceServers } from "@/lib/turn-config";
-import type { Producer, Consumer, Transport } from "mediasoup-client";
+import type { types } from "mediasoup-client";
+
+type Producer = types.Producer;
+type Consumer = types.Consumer;
+type Transport = types.Transport;
 
 export interface SFUParticipant {
   userId: string;
@@ -181,7 +185,7 @@ export function useSFUChannel(
       sendTransportRef.current = sendTransport;
       
       // Connect send transport
-      sendTransport.on("connect", async ({ dtlsParameters }, callback, errback) => {
+      sendTransport.on("connect", async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
         try {
           await new Promise<void>((resolve, reject) => {
             socket.emit(
@@ -207,7 +211,7 @@ export function useSFUChannel(
       });
       
       // Handle produce event
-      sendTransport.on("produce", async ({ kind, rtpParameters }, callback, errback) => {
+      sendTransport.on("produce", async ({ kind, rtpParameters }: any, callback: (params: { id: string }) => void, errback: (error: Error) => void) => {
         try {
           const producerId = await new Promise<string>((resolve, reject) => {
             socket.emit(
@@ -258,7 +262,7 @@ export function useSFUChannel(
       recvTransportRef.current = recvTransport;
       
       // Connect receive transport
-      recvTransport.on("connect", async ({ dtlsParameters }, callback, errback) => {
+      recvTransport.on("connect", async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
         try {
           await new Promise<void>((resolve, reject) => {
             socket.emit(
@@ -619,10 +623,11 @@ export function useSFUChannel(
    * Task 21.2: Switch simulcast layers based on bandwidth and visibility
    */
   useEffect(() => {
-    if (!isConnected || participants.length === 0) return;
+    const participantsArray = Array.from(participants.values());
+    if (!isConnected || participantsArray.length === 0) return;
     
     const adaptiveQualityInterval = setInterval(() => {
-      participants.forEach(participant => {
+      participantsArray.forEach(participant => {
         participant.consumers.forEach(consumer => {
           if (consumer.kind === 'video' && !consumer.paused) {
             // Get consumer stats to estimate bandwidth
@@ -654,7 +659,7 @@ export function useSFUChannel(
               } else if (packetLossRate > 0.10) {
                 // Very high packet loss: drop to low
                 targetLayer = 0;
-              } else if (participants.length > 6) {
+              } else if (participantsArray.length > 6) {
                 // Many participants: use medium to conserve bandwidth
                 targetLayer = 1;
               }

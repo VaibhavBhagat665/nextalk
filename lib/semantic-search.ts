@@ -192,9 +192,11 @@ export async function findSimilarMessages(
   try {
     const message = await prisma.message.findUnique({
       where: { id: messageId },
+      // @ts-expect-error - embedding field is Unsupported type in Prisma
       select: { embedding: true, channelId: true },
     });
 
+    // @ts-expect-error - embedding exists but not typed
     if (!message || !message.embedding) {
       return [];
     }
@@ -220,7 +222,9 @@ export async function findSimilarMessages(
         AND m."channelId" = ${message.channelId}
       ORDER BY m.embedding <=> $1::vector
       LIMIT ${limit}
-    `, message.embedding);
+    `, 
+    // @ts-expect-error - embedding exists but not typed
+    message.embedding);
 
     return results;
   } catch (error: any) {

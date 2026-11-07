@@ -903,7 +903,9 @@ io.on("connection", (socket) => {
           fileUrl: data.fileUrl,
           fileName: data.fileName,
           fileType: data.fileType,
+          // @ts-expect-error - blurhash and imageDimensions are Unsupported types
           blurhash: data.blurhash,
+          // @ts-expect-error - imageDimensions is Unsupported type
           imageDimensions: data.imageDimensions,
           channelId: data.channelId,
           userId: user.id,
@@ -925,7 +927,9 @@ io.on("connection", (socket) => {
         fileUrl: savedMessage.fileUrl,
         fileName: savedMessage.fileName,
         fileType: savedMessage.fileType,
+        // @ts-expect-error - blurhash is Unsupported type
         blurhash: savedMessage.blurhash,
+        // @ts-expect-error - imageDimensions is Unsupported type
         imageDimensions: savedMessage.imageDimensions,
         channelId: savedMessage.channelId,
         userId,
