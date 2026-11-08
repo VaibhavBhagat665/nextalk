@@ -1,13 +1,15 @@
 services:
-  # Socket.io Server
+  # Socket.io Server using Docker
   - type: web
     name: nextalk-socket-server
-    runtime: node
-    env: node
+    runtime: docker
+    env: docker
     region: oregon
     plan: starter
-    buildCommand: bash render-build.sh
-    startCommand: npm run start:socket
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
