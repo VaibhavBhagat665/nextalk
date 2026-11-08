@@ -6,7 +6,7 @@ services:
     env: node
     region: oregon
     plan: starter
-    buildCommand: npm ci && npx prisma generate
+    buildCommand: bash render-build.sh
     startCommand: npm run start:socket
     envVars:
       - key: NODE_ENV
