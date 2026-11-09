@@ -52,8 +52,15 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 
-# deployment guide (contains credential references)
-DEPLOY_SETUP.md
+# deployment guides and implementation docs (internal)
+DEPLOYMENT.md
+DOCKER-DEPLOYMENT.md
+DEPLOYMENT-OPTIONS.md
+RENDER-DEPLOYMENT.md
+FREE-DEPLOYMENT.md
+VERCEL-BACKEND-SETUP.md
+TASK_*.md
+*_IMPLEMENTATION.md
 
 # more env files
 .env.production
