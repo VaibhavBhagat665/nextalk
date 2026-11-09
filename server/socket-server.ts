@@ -13,14 +13,18 @@ import { PresenceService } from "./presence-service";
 let sfuServer: any = null;
 const SKIP_SFU = process.env.SKIP_SFU === 'true' || process.env.SKIP_SFU === '1';
 
+// Load SFU asynchronously if enabled (no top-level await)
 if (!SKIP_SFU) {
-  try {
-    const sfuModule = await import("./sfu-server");
-    sfuServer = sfuModule.sfuServer;
-    console.log("✅ SFU server loaded");
-  } catch (error) {
-    console.warn("⚠️  SFU server not available (voice/video features disabled):", error);
-  }
+  import("./sfu-server")
+    .then((sfuModule) => {
+      sfuServer = sfuModule.sfuServer;
+      console.log("✅ SFU server loaded");
+    })
+    .catch((error) => {
+      console.warn("⚠️  SFU server not available (voice/video features disabled):", error);
+    });
+} else {
+  console.log("⏭️  SFU disabled via SKIP_SFU environment variable");
 }
 
 const app = express();
