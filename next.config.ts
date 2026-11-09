@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
     // !! WARN !!
     ignoreBuildErrors: true,
   },
+  env: {
+    // Expose socket URL to client-side (Vercel doesn't allow NEXT_PUBLIC_ prefix in env vars)
+    NEXT_PUBLIC_SOCKET_URL: process.env.SOCKET_SERVER_URL || "http://localhost:3001",
+  },
   images: {
     remotePatterns: [
       {
@@ -25,7 +29,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+    const socketUrl = process.env.SOCKET_SERVER_URL || "http://localhost:3001";
     return [
       {
         source: "/socket.io/:path*",
