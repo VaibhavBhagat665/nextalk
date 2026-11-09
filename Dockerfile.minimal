@@ -1,0 +1,36 @@
+# Extreme minimal Docker image for free tier
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install build essentials (minimal)
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package*.json ./
+
+# Install ONLY what's needed for server
+RUN npm install --production --prefer-offline && \
+    npm install tsx@4.23.15 --no-save && \
+    npm cache clean --force
+
+# Copy prisma
+COPY prisma ./prisma/
+
+# Generate Prisma (then clean up)
+RUN npx prisma generate && \
+    rm -rf /tmp/* /root/.npm
+
+# Copy server code only
+COPY server ./server
+COPY lib ./lib
+
+# Remove unnecessary files
+RUN rm -rf /usr/share/man/* /tmp/* /var/cache/apk/*
+
+EXPOSE 3001
+
+ENV NODE_ENV=production
+ENV PORT=3001
+
+CMD ["npx", "tsx", "server/socket-server.ts"]
