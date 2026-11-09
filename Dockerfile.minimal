@@ -10,8 +10,9 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY packages ./packages
 
-# Install everything (workspace needs this)
-RUN npm install --prefer-offline && \
+# Install PRODUCTION only (NO canvas!)
+RUN npm ci --omit=dev --prefer-offline && \
+    npm install --no-save prisma tsx && \
     npm cache clean --force
 
 # Copy prisma

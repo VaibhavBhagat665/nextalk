@@ -6,7 +6,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies (required for native modules)
+# Install build dependencies (required for mediasoup)
 RUN apk add --no-cache python3 make g++ libc6-compat
 
 # Copy root package files and workspace package
@@ -14,8 +14,10 @@ COPY package*.json ./
 COPY packages ./packages
 COPY prisma ./prisma/
 
-# Install ALL dependencies first (including workspace packages)
-RUN npm install --prefer-offline
+# Install PRODUCTION dependencies only (skips canvas in devDependencies)
+# Also install prisma and tsx needed for build
+RUN npm ci --omit=dev --prefer-offline && \
+    npm install --no-save prisma tsx
 
 # Generate Prisma Client
 RUN npx prisma generate
@@ -28,7 +30,7 @@ WORKDIR /app
 # Install runtime dependencies only
 RUN apk add --no-cache libc6-compat
 
-# Copy node_modules from builder (includes workspace packages)
+# Copy node_modules from builder (NO canvas!)
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/prisma ./prisma
