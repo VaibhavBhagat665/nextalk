@@ -7,7 +7,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies (required for mediasoup)
-RUN apk add --no-cache python3 make g++ libc6-compat
+RUN apk add --no-cache python3 make g++ libc6-compat py3-pip
 
 # Copy root package files and workspace package
 COPY package*.json ./

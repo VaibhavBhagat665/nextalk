@@ -3,8 +3,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install build essentials (minimal)
-RUN apk add --no-cache python3 make g++
+# Install build essentials (minimal) + pip for mediasoup
+RUN apk add --no-cache python3 make g++ py3-pip
 
 # Copy package files INCLUDING workspace packages
 COPY package*.json ./
