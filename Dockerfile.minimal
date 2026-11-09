@@ -6,12 +6,12 @@ WORKDIR /app
 # Install build essentials (minimal)
 RUN apk add --no-cache python3 make g++
 
-# Copy package files
+# Copy package files INCLUDING workspace packages
 COPY package*.json ./
+COPY packages ./packages
 
-# Install ONLY what's needed for server
-RUN npm install --production --prefer-offline && \
-    npm install tsx@4.23.15 --no-save && \
+# Install everything (workspace needs this)
+RUN npm install --prefer-offline && \
     npm cache clean --force
 
 # Copy prisma
@@ -25,8 +25,11 @@ RUN npx prisma generate && \
 COPY server ./server
 COPY lib ./lib
 
-# Remove unnecessary files
-RUN rm -rf /usr/share/man/* /tmp/* /var/cache/apk/*
+# Remove unnecessary files to save space
+RUN rm -rf /usr/share/man/* /tmp/* /var/cache/apk/* \
+    packages/crypto/src \
+    packages/crypto/*.test.* \
+    packages/crypto/tsconfig.json
 
 EXPOSE 3001
 

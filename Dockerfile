@@ -9,12 +9,13 @@ WORKDIR /app
 # Install build dependencies (required for native modules)
 RUN apk add --no-cache python3 make g++ libc6-compat
 
-# Copy package files
+# Copy root package files and workspace package
 COPY package*.json ./
+COPY packages ./packages
 COPY prisma ./prisma/
 
-# Install dependencies (production only to save memory)
-RUN npm ci --omit=dev --prefer-offline
+# Install ALL dependencies first (including workspace packages)
+RUN npm install --prefer-offline
 
 # Generate Prisma Client
 RUN npx prisma generate
@@ -27,8 +28,9 @@ WORKDIR /app
 # Install runtime dependencies only
 RUN apk add --no-cache libc6-compat
 
-# Copy node_modules from builder
+# Copy node_modules from builder (includes workspace packages)
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/prisma ./prisma
 
 # Copy application files

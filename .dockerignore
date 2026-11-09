@@ -50,10 +50,11 @@ benchmarks
 scripts/*.ps1
 scripts/*.sh
 
-# Client-side only
+# Client-side only (Next.js app)
 components
 app
 public
 styles
-hooks/useSFU*
-hooks/useSocket*
+
+# Keep packages folder for workspace dependencies!
+# Don't ignore packages/
