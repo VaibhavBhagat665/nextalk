@@ -1,38 +1,31 @@
 /**
- * mediasoup Client Wrapper
+ * ============================================================================
+ * Mediasoup Client Wrapper (STUB - Voice/Video Disabled)
+ * ============================================================================
  * 
- * This module provides a clean interface for client-side WebRTC media routing
- * through the mediasoup SFU server.
+ * This is a stub implementation since mediasoup packages are not installed.
+ * Voice/Video calling features are disabled in this deployment.
  * 
- * Architecture:
- * - Device: Represents the client's media capabilities
- * - Transports: Send and receive transports for media
- * - Producers: Local media tracks (audio/video) sent to SFU
- * - Consumers: Remote media tracks received from SFU
+ * To enable: Install mediasoup and mediasoup-client packages.
+ * 
  */
 
-import * as mediasoupClient from 'mediasoup-client';
-import type { types } from 'mediasoup-client';
-
-type Device = types.Device;
-type Transport = types.Transport;
-type Producer = types.Producer;
-type Consumer = types.Consumer;
-type RtpCapabilities = types.RtpCapabilities;
-type DtlsParameters = types.DtlsParameters;
-type IceCandidate = types.IceCandidate;
-type IceParameters = types.IceParameters;
-
-// ============================================================================
-// Types
-// ============================================================================
+// Stub types
+type RtpCapabilities = any;
+type Producer = any;
+type Consumer = any;
+type Transport = any;
+type Device = any;
+type DtlsParameters = any;
+type IceCandidate = any;
+type IceParameters = any;
 
 export interface TransportOptions {
   id: string;
   iceParameters: IceParameters;
   iceCandidates: IceCandidate[];
   dtlsParameters: DtlsParameters;
-  iceServers?: RTCIceServer[]; // TURN server configuration
+  iceServers?: RTCIceServer[];
 }
 
 export interface ProducerOptions {
@@ -57,10 +50,6 @@ export interface MediasoupClientEvents {
   error: (error: Error) => void;
 }
 
-// ============================================================================
-// MediasoupClient Class
-// ============================================================================
-
 export class MediasoupClient {
   private device: Device | null = null;
   private sendTransport: Transport | null = null;
@@ -69,23 +58,14 @@ export class MediasoupClient {
   private consumers: Map<string, Consumer> = new Map();
   private eventHandlers: Partial<MediasoupClientEvents> = {};
 
-  /**
-   * Check if device is loaded
-   */
   get isLoaded(): boolean {
-    return this.device !== null && this.device.loaded;
+    return false;
   }
 
-  /**
-   * Get device RTP capabilities
-   */
   get rtpCapabilities(): RtpCapabilities | null {
-    return this.device?.rtpCapabilities || null;
+    return null;
   }
 
-  /**
-   * Register event handler
-   */
   on<K extends keyof MediasoupClientEvents>(
     event: K,
     handler: MediasoupClientEvents[K]
@@ -93,304 +73,47 @@ export class MediasoupClient {
     this.eventHandlers[event] = handler;
   }
 
-  /**
-   * Emit event
-   */
-  private emit<K extends keyof MediasoupClientEvents>(
-    event: K,
-    ...args: Parameters<MediasoupClientEvents[K]>
-  ): void {
-    const handler = this.eventHandlers[event];
-    if (handler) {
-      // @ts-ignore - TypeScript has trouble with spread args
-      handler(...args);
-    }
-  }
-
-  /**
-   * Load device with router RTP capabilities
-   */
   async loadDevice(routerRtpCapabilities: RtpCapabilities): Promise<void> {
-    try {
-      this.device = new mediasoupClient.Device();
-      await this.device.load({ routerRtpCapabilities });
-      console.log('📱 mediasoup Device loaded', {
-        handlerName: this.device.handlerName,
-        capabilities: this.device.rtpCapabilities,
-      });
-    } catch (error) {
-      console.error('❌ Failed to load mediasoup device:', error);
-      this.emit('error', error as Error);
-      throw error;
-    }
+    throw new Error("Voice/Video features are disabled (mediasoup not installed)");
   }
 
-  /**
-   * Create send transport for producing media
-   */
   async createSendTransport(transportOptions: TransportOptions): Promise<Transport> {
-    if (!this.device) {
-      throw new Error('Device not loaded. Call loadDevice() first.');
-    }
-
-    try {
-      // Build transport configuration with optional TURN servers
-      const transportConfig: any = {
-        id: transportOptions.id,
-        iceParameters: transportOptions.iceParameters,
-        iceCandidates: transportOptions.iceCandidates,
-        dtlsParameters: transportOptions.dtlsParameters,
-      };
-
-      // Add TURN servers if provided
-      if (transportOptions.iceServers && transportOptions.iceServers.length > 0) {
-        transportConfig.iceServers = transportOptions.iceServers;
-        console.log('🔄 TURN servers configured for send transport:', transportOptions.iceServers);
-      }
-
-      this.sendTransport = this.device.createSendTransport(transportConfig);
-
-      // Handle transport connection
-      this.sendTransport.on('connect', async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
-        try {
-          // This callback will be called by the application to connect the transport
-          console.log('🔌 Send transport connecting...');
-          callback();
-        } catch (error) {
-          errback(error as Error);
-        }
-      });
-
-      // Handle producer creation
-      this.sendTransport.on('produce', async ({ kind, rtpParameters, appData }: any, callback: (params: { id: string }) => void, errback: (error: Error) => void) => {
-        try {
-          // This callback will be called by the application to notify server of new producer
-          console.log(`🎤 Producing ${kind}...`);
-          callback({ id: '' }); // ID will be set by server response
-        } catch (error) {
-          errback(error as Error);
-        }
-      });
-
-      this.sendTransport.on('connectionstatechange', (state: any) => {
-        console.log(`📡 Send transport state: ${state}`);
-        if (state === 'connected') {
-          this.emit('transportConnected', this.sendTransport!.id);
-        } else if (state === 'closed' || state === 'failed') {
-          this.emit('transportClosed', this.sendTransport!.id);
-        }
-      });
-
-      console.log('✅ Send transport created:', this.sendTransport.id);
-      return this.sendTransport;
-    } catch (error) {
-      console.error('❌ Failed to create send transport:', error);
-      this.emit('error', error as Error);
-      throw error;
-    }
+    throw new Error("Voice/Video features are disabled (mediasoup not installed)");
   }
 
-  /**
-   * Create receive transport for consuming media
-   */
   async createRecvTransport(transportOptions: TransportOptions): Promise<Transport> {
-    if (!this.device) {
-      throw new Error('Device not loaded. Call loadDevice() first.');
-    }
-
-    try {
-      // Build transport configuration with optional TURN servers
-      const transportConfig: any = {
-        id: transportOptions.id,
-        iceParameters: transportOptions.iceParameters,
-        iceCandidates: transportOptions.iceCandidates,
-        dtlsParameters: transportOptions.dtlsParameters,
-      };
-
-      // Add TURN servers if provided
-      if (transportOptions.iceServers && transportOptions.iceServers.length > 0) {
-        transportConfig.iceServers = transportOptions.iceServers;
-        console.log('🔄 TURN servers configured for receive transport:', transportOptions.iceServers);
-      }
-
-      this.recvTransport = this.device.createRecvTransport(transportConfig);
-
-      // Handle transport connection
-      this.recvTransport.on('connect', async ({ dtlsParameters }: any, callback: () => void, errback: (error: Error) => void) => {
-        try {
-          console.log('🔌 Receive transport connecting...');
-          callback();
-        } catch (error) {
-          errback(error as Error);
-        }
-      });
-
-      this.recvTransport.on('connectionstatechange', (state: any) => {
-        console.log(`📡 Receive transport state: ${state}`);
-        if (state === 'connected') {
-          this.emit('transportConnected', this.recvTransport!.id);
-        } else if (state === 'closed' || state === 'failed') {
-          this.emit('transportClosed', this.recvTransport!.id);
-        }
-      });
-
-      console.log('✅ Receive transport created:', this.recvTransport.id);
-      return this.recvTransport;
-    } catch (error) {
-      console.error('❌ Failed to create receive transport:', error);
-      this.emit('error', error as Error);
-      throw error;
-    }
+    throw new Error("Voice/Video features are disabled (mediasoup not installed)");
   }
 
-  /**
-   * Produce media (send local track to SFU)
-   */
   async produce(options: ProducerOptions): Promise<Producer> {
-    if (!this.sendTransport) {
-      throw new Error('Send transport not created. Call createSendTransport() first.');
-    }
-
-    try {
-      const producer = await this.sendTransport.produce({
-        track: options.track,
-        appData: options.appData,
-      });
-
-      this.producers.set(producer.id, producer);
-
-      producer.on('transportclose', () => {
-        console.log(`🚫 Producer ${producer.id} transport closed`);
-        this.producers.delete(producer.id);
-        this.emit('producerClosed', producer.id);
-      });
-
-      producer.on('trackended', () => {
-        console.log(`🎬 Producer ${producer.id} track ended`);
-        // Optionally close the producer
-      });
-
-      console.log(`✅ Producer created: ${producer.kind} (${producer.id})`);
-      this.emit('producerCreated', producer);
-      return producer;
-    } catch (error) {
-      console.error('❌ Failed to produce:', error);
-      this.emit('error', error as Error);
-      throw error;
-    }
+    throw new Error("Voice/Video features are disabled (mediasoup not installed)");
   }
 
-  /**
-   * Consume media (receive remote track from SFU)
-   */
   async consume(options: ConsumerOptions): Promise<Consumer> {
-    if (!this.recvTransport) {
-      throw new Error('Receive transport not created. Call createRecvTransport() first.');
-    }
-
-    try {
-      const consumer = await this.recvTransport.consume({
-        id: options.id,
-        producerId: options.producerId,
-        kind: options.kind,
-        rtpParameters: options.rtpParameters,
-      });
-
-      this.consumers.set(consumer.id, consumer);
-
-      consumer.on('transportclose', () => {
-        console.log(`🚫 Consumer ${consumer.id} transport closed`);
-        this.consumers.delete(consumer.id);
-        this.emit('consumerClosed', consumer.id);
-      });
-
-      consumer.on('trackended', () => {
-        console.log(`🎬 Consumer ${consumer.id} track ended`);
-        // Optionally close the consumer
-      });
-
-      // Resume consumer (start receiving media)
-      await consumer.resume();
-
-      console.log(`✅ Consumer created: ${consumer.kind} (${consumer.id})`);
-      this.emit('consumerCreated', consumer);
-      return consumer;
-    } catch (error) {
-      console.error('❌ Failed to consume:', error);
-      this.emit('error', error as Error);
-      throw error;
-    }
+    throw new Error("Voice/Video features are disabled (mediasoup not installed)");
   }
 
-  /**
-   * Close a producer
-   */
   closeProducer(producerId: string): void {
-    const producer = this.producers.get(producerId);
-    if (producer) {
-      producer.close();
-      this.producers.delete(producerId);
-      this.emit('producerClosed', producerId);
-      console.log(`🗑️  Producer closed: ${producerId}`);
-    }
+    // no-op
   }
 
-  /**
-   * Close a consumer
-   */
   closeConsumer(consumerId: string): void {
-    const consumer = this.consumers.get(consumerId);
-    if (consumer) {
-      consumer.close();
-      this.consumers.delete(consumerId);
-      this.emit('consumerClosed', consumerId);
-      console.log(`🗑️  Consumer closed: ${consumerId}`);
-    }
+    // no-op
   }
 
-  /**
-   * Get all active producers
-   */
   getProducers(): Producer[] {
-    return Array.from(this.producers.values());
+    return [];
   }
 
-  /**
-   * Get all active consumers
-   */
   getConsumers(): Consumer[] {
-    return Array.from(this.consumers.values());
+    return [];
   }
 
-  /**
-   * Close all transports and cleanup
-   */
   close(): void {
-    // Close all producers
-    this.producers.forEach((producer) => producer.close());
     this.producers.clear();
-
-    // Close all consumers
-    this.consumers.forEach((consumer) => consumer.close());
     this.consumers.clear();
-
-    // Close transports
-    if (this.sendTransport) {
-      this.sendTransport.close();
-      this.sendTransport = null;
-    }
-    if (this.recvTransport) {
-      this.recvTransport.close();
-      this.recvTransport = null;
-    }
-
-    console.log('🛑 MediasoupClient closed');
   }
 }
-
-// ============================================================================
-// Singleton instance (optional pattern)
-// ============================================================================
 
 let mediasoupClientInstance: MediasoupClient | null = null;
 

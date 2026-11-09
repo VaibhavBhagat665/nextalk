@@ -21,11 +21,10 @@ COPY package*.json ./
 COPY packages ./packages
 COPY prisma ./prisma
 
-# Install dependencies but IGNORE mediasoup postinstall failures
-# Mediasoup is optional - server works without SFU features
-RUN npm install --production --prefer-offline --ignore-scripts || true
+# Install dependencies (mediasoup removed from package.json)
+RUN npm install --production --prefer-offline
 
-# Run only essential postinstall scripts
+# Generate Prisma client
 RUN npx prisma generate
 
 # Install runtime tools
