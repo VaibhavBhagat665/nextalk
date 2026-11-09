@@ -1,12 +1,12 @@
 services:
-  # Socket.io Server using Docker
+  # Socket.io Server using Docker (PRODUCTION-READY)
   - type: web
     name: nextalk-socket-server
     runtime: docker
     env: docker
     region: oregon
     plan: starter
-    dockerfilePath: ./Dockerfile
+    dockerfilePath: ./Dockerfile.production
     dockerContext: ./
     healthCheckPath: /health
     autoDeploy: true

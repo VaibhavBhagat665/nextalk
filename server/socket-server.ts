@@ -6,9 +6,22 @@ import Redis from "ioredis";
 import { PrismaClient } from "@prisma/client";
 import { latencyMiddleware } from "./latency-tracker";
 import { getAllMetrics, formatPrometheusMetrics } from "./metrics-service";
-import { sfuServer } from "./sfu-server";
 import { sendPushNotification } from "./push-notification-service";
 import { PresenceService } from "./presence-service";
+
+// SFU is optional - only load if not explicitly disabled
+let sfuServer: any = null;
+const SKIP_SFU = process.env.SKIP_SFU === 'true' || process.env.SKIP_SFU === '1';
+
+if (!SKIP_SFU) {
+  try {
+    const sfuModule = await import("./sfu-server");
+    sfuServer = sfuModule.sfuServer;
+    console.log("✅ SFU server loaded");
+  } catch (error) {
+    console.warn("⚠️  SFU server not available (voice/video features disabled):", error);
+  }
+}
 
 const app = express();
 const server = createServer(app);
