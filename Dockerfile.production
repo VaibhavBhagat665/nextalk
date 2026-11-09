@@ -21,14 +21,14 @@ COPY package*.json ./
 COPY packages ./packages
 COPY prisma ./prisma
 
-# Install dependencies (mediasoup removed from package.json)
-RUN npm install --production --prefer-offline
+# Install dependencies with --ignore-scripts to skip native builds
+RUN npm install --production --prefer-offline --ignore-scripts
 
-# Generate Prisma client
+# Generate Prisma client (safe to run, just generates JS)
 RUN npx prisma generate
 
-# Install runtime tools
-RUN npm install --no-save tsx@4.23.15
+# Install tsx (no native deps)
+RUN npm install --no-save tsx@4.23.15 --ignore-scripts
 
 # ============================================================================
 # Stage 2: Production Runtime

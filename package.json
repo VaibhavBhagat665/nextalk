@@ -85,7 +85,6 @@
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.3",
     "@vitejs/plugin-react": "^6.1.2",
-    "canvas": "^3.2.3",
     "concurrently": "^9.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
