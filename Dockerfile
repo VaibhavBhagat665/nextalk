@@ -16,7 +16,7 @@ COPY prisma ./prisma/
 
 # Install PRODUCTION dependencies only (skips canvas in devDependencies)
 # Also install prisma and tsx needed for build
-RUN npm ci --omit=dev --prefer-offline && \
+RUN npm install --production --prefer-offline && \
     npm install --no-save prisma tsx
 
 # Generate Prisma Client

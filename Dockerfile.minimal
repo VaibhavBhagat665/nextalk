@@ -11,7 +11,7 @@ COPY package*.json ./
 COPY packages ./packages
 
 # Install PRODUCTION only (NO canvas!)
-RUN npm ci --omit=dev --prefer-offline && \
+RUN npm install --production --prefer-offline && \
     npm install --no-save prisma tsx && \
     npm cache clean --force
 
