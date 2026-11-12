@@ -78,7 +78,14 @@ if (REDIS_URL) {
       },
       enableOfflineQueue: false,
     });
-    const subClient = pubClient.duplicate();
+    const subClient = new Redis(REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      enableOfflineQueue: false,
+    });
 
     // Initialize presence service with pub client
     presenceService = new PresenceService(pubClient);
